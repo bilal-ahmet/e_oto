@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_runs" DROP COLUMN "upscaled_image_urls";
