@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Fraunces } from 'next/font/google';
 import { env } from '@/lib/env';
+import { EmailLink } from '@/components/EmailLink';
 
 const fraunces = Fraunces({
   variable: '--font-fraunces',
@@ -39,9 +40,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <Link href="/privacy" className="hover:text-[#241f1c]">
               Privacy Policy
             </Link>
-            <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-[#241f1c]">
-              {CONTACT_EMAIL}
-            </a>
+            <EmailLink email={CONTACT_EMAIL} className="hover:text-[#241f1c]" />
           </div>
         </div>
       </footer>

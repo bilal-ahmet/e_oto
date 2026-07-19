@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { env } from '@/lib/env';
+import { EmailLink } from '@/components/EmailLink';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy — Velora Art Designs',
@@ -80,9 +81,7 @@ export default function PrivacyPolicyPage() {
         <p>
           Questions about this policy or our use of the Pinterest API can be
           sent to{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`} className="underline underline-offset-2 hover:text-[#241f1c]">
-            {CONTACT_EMAIL}
-          </a>
+          <EmailLink email={CONTACT_EMAIL} className="underline underline-offset-2 hover:text-[#241f1c]" />
           .
         </p>
       </Section>
