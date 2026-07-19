@@ -9,14 +9,16 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 import { env } from '@/lib/env';
-import { pgSsl } from './ssl';
+import { pgSsl, stripSslModeFromUrl } from './ssl';
 
 declare global {
   var __pgPool: Pool | undefined;
 }
 
 const pool = (globalThis.__pgPool ??= new Pool({
-  connectionString: env.DATABASE_URL,
+  // sslmode connection string'den ayıklanır — SSL yalnızca aşağıdaki açık `ssl` objesiyle kontrol edilir
+  // (bkz. lib/db/ssl.ts — aksi halde pg, sslmode=require'ı verify-full sayıp self-signed CA'da patlar).
+  connectionString: stripSslModeFromUrl(env.DATABASE_URL),
   ssl: pgSsl(), // Managed PG (prod) SSL; lokalde undefined → kapalı.
   max: 10,
   idleTimeoutMillis: 30_000,

@@ -10,7 +10,7 @@ import { loadEnvConfig } from '@next/env';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
-import { pgSsl } from '../src/lib/db/ssl';
+import { pgSsl, stripSslModeFromUrl } from '../src/lib/db/ssl';
 
 loadEnvConfig(process.cwd());
 
@@ -18,7 +18,8 @@ async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL tanımlı değil — migration çalıştırılamaz.');
 
-  const pool = new Pool({ connectionString, ssl: pgSsl(), max: 1 });
+  // sslmode connection string'den ayıklanır — SSL yalnızca pgSsl()'in döndürdüğü açık objeyle kontrol edilir.
+  const pool = new Pool({ connectionString: stripSslModeFromUrl(connectionString), ssl: pgSsl(), max: 1 });
   try {
     console.log('[migrate] migration başlıyor…');
     await migrate(drizzle(pool), { migrationsFolder: 'migrations' });
