@@ -5,12 +5,19 @@
  */
 
 import cron from 'node-cron';
-import { listCompetitorShops } from '@/lib/db/queries';
+import {
+  listCompetitorShops,
+  releaseAdvisoryLock,
+  tryAdvisoryLock,
+} from '@/lib/db/queries';
 import { scanCompetitor } from '@/lib/scoring/competitor-algorithm';
 
 let registered = false;
+const SCAN_LOCK_KEY = 728_402; // rakip tarama advisory lock (recovery'den farklı)
 
 async function runScanAll(): Promise<void> {
+  // Advisory lock: birden fazla instance olsa bile tarama tek sefer çalışır.
+  if (!(await tryAdvisoryLock(SCAN_LOCK_KEY))) return;
   try {
     const shops = await listCompetitorShops();
     for (const shop of shops) {
@@ -23,6 +30,8 @@ async function runScanAll(): Promise<void> {
     console.log(`[cron] rakip tarama tamam — ${shops.length} mağaza.`);
   } catch (e) {
     console.error('[cron] rakip tarama başlatılamadı:', e instanceof Error ? e.message : e);
+  } finally {
+    await releaseAdvisoryLock(SCAN_LOCK_KEY);
   }
 }
 

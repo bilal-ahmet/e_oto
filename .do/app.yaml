@@ -1,0 +1,106 @@
+# DigitalOcean App Platform spec — Etsy Otomasyon
+# TEMPLATE: <...> alanlarını doldurun. Secret değerleri BURAYA YAZMAYIN; DO panelinden
+# (App → Settings → Environment Variables) SECRET olarak girin. Bu dosya git'e commit edilir.
+#
+# Uygulama: tek Web Service (Next.js frontend + API + cron) + bir PRE_DEPLOY job (migration).
+# Deploy: doctl apps create --spec .do/app.yaml  (veya panelden "Create from spec").
+
+name: etsy-otomasyon
+region: fra # Spaces/DB ile aynı bölge önerilir (fra1)
+
+# ── Tüm bileşenlerce paylaşılan ortam değişkenleri ──────────────────────────────
+# type: SECRET olanların DEĞERİ panelde girilir (aşağıda value yok). Diğerleri düz config.
+envs:
+  - key: DATABASE_URL
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: DATABASE_SSL
+    scope: RUN_AND_BUILD_TIME
+    value: "true"
+  # DO Managed PG "CA certificate"ını doğrulamak için (opsiyonel ama önerilir):
+  # - key: DATABASE_CA_CERT
+  #   scope: RUN_AND_BUILD_TIME
+  #   type: SECRET
+  - key: TOKEN_ENCRYPTION_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ANTHROPIC_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: FAL_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: GOOGLE_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ETSY_CLIENT_ID
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ETSY_CLIENT_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ETSY_REDIRECT_URI
+    scope: RUN_AND_BUILD_TIME
+    value: "https://bbfcreative.com.tr/api/auth/etsy/callback"
+  - key: ETSY_SHOP_NAME
+    scope: RUN_AND_BUILD_TIME
+    value: "VeloraArtDesigns"
+  - key: PUBLIC_BASE_URL
+    scope: RUN_AND_BUILD_TIME
+    value: "https://bbfcreative.com.tr"
+  # DO Spaces (üretimde ZORUNLU — ephemeral disk yerine kalıcı depolama):
+  - key: DO_SPACES_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: DO_SPACES_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: DO_SPACES_BUCKET
+    scope: RUN_AND_BUILD_TIME
+    value: "etsy-otomasyon-assets"
+  - key: DO_SPACES_REGION
+    scope: RUN_AND_BUILD_TIME
+    value: "fra1"
+  - key: DO_SPACES_ENDPOINT
+    scope: RUN_AND_BUILD_TIME
+    value: "https://fra1.digitaloceanspaces.com"
+  - key: COMPETITOR_CRON_ENABLED
+    scope: RUN_AND_BUILD_TIME
+    value: "true"
+  # PIPELINE_RECOVERY_ENABLED varsayılan açık; kapatmak için "false" verin.
+
+# ── Web Service (Next.js) ───────────────────────────────────────────────────────
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: bilal-ahmet/e-oto
+      branch: main
+      deploy_on_push: true
+    http_port: 3000
+    instance_count: 1 # cron + fire-and-forget iş → tek instance (advisory lock ileride 2+'ya izin verir)
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 20
+      period_seconds: 15
+
+# ── Pre-Deploy Job (migration) ──────────────────────────────────────────────────
+# Her deploy'da yeni kod canlıya geçmeden ÖNCE bekleyen migration'ları uygular.
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: bilal-ahmet/e-oto
+      branch: main
+    run_command: npm run db:migrate
+    instance_count: 1
+    instance_size_slug: basic-xs
+
+# ── Custom domain ───────────────────────────────────────────────────────────────
+domains:
+  - domain: bbfcreative.com.tr
+    type: PRIMARY

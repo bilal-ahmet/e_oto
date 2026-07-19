@@ -64,6 +64,42 @@ export function getEnv(): Env {
   return _env;
 }
 
+/**
+ * Üretim (NODE_ENV=production) ek doğrulaması — instrumentation boot'unda çağrılır.
+ * KRİTİK: Spaces eksikse boot'u durdurur; çünkü App Platform diski ephemeral olduğundan
+ * lokal diske yazılan tüm görseller/dosyalar restart'ta kaybolur (sessiz veri kaybı).
+ * Diğer eksik anahtarlar için yalnızca uyarır.
+ */
+export function assertProdEnv(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  const e = getEnv();
+
+  const spacesComplete =
+    e.DO_SPACES_KEY && e.DO_SPACES_SECRET && e.DO_SPACES_BUCKET && e.DO_SPACES_REGION && e.DO_SPACES_ENDPOINT;
+  if (!spacesComplete) {
+    // PUBLIC_BASE_URL hâlâ localhost ise gerçek bir deploy değil (dev'de `next start` denemesi) → sert hata atma.
+    const isLocal = /localhost|127\.0\.0\.1/.test(e.PUBLIC_BASE_URL);
+    if (isLocal) {
+      console.warn('[env] Üretim modu ama PUBLIC_BASE_URL localhost — Spaces zorunluluğu atlandı (lokal test).');
+    } else {
+      throw new Error(
+        'Üretimde DO_SPACES_* eksik — App Platform diski ephemeral olduğundan dosyalar kaybolur. Spaces yapılandırın.',
+      );
+    }
+  }
+
+  const recommended: Array<[string, unknown]> = [
+    ['ANTHROPIC_API_KEY', e.ANTHROPIC_API_KEY],
+    ['FAL_KEY', e.FAL_KEY],
+    ['ETSY_CLIENT_ID', e.ETSY_CLIENT_ID],
+    ['ETSY_CLIENT_SECRET', e.ETSY_CLIENT_SECRET],
+    ['ETSY_REDIRECT_URI', e.ETSY_REDIRECT_URI],
+  ];
+  for (const [name, val] of recommended) {
+    if (!val) console.warn(`[env] Uyarı: üretimde ${name} tanımlı değil — ilgili özellik çalışmayabilir.`);
+  }
+}
+
 // Convenience proxy: env.DATABASE_URL şeklinde erişim sağlar, lazy validate eder.
 export const env = new Proxy({} as Env, {
   get(_target, key: string) {

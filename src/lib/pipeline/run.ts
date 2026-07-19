@@ -33,7 +33,7 @@ import {
   uploadListingImage,
   uploadListingVideo,
 } from '@/lib/etsy/listings';
-import type { ImageModel, MediaUrls, PipelineRun, SeoData } from '@/types';
+import type { ImageModel, MediaUrls, PipelineRun, PublishProgress, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
@@ -54,6 +54,13 @@ export async function generateVariations(
   count: number,
 ): Promise<void> {
   try {
+    // Idempotent: varyasyonlar zaten üretilmişse tekrar üretme (resume).
+    const existing = await getPipelineRun(runId);
+    if (existing?.variationUrls?.length) {
+      await updatePipelineRun(runId, { status: 'awaiting_approval', attempts: 0, errorMessage: null });
+      return;
+    }
+
     await updatePipelineRun(runId, { status: 'generating_image', errorMessage: null });
 
     const images = await generateImages(model, prompt, count);
@@ -64,7 +71,7 @@ export async function generateVariations(
       );
     }
 
-    await updatePipelineRun(runId, { variationUrls, status: 'awaiting_approval' });
+    await updatePipelineRun(runId, { variationUrls, status: 'awaiting_approval', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
     throw err;
@@ -90,6 +97,12 @@ export async function selectImageForRun(runId: string, url: string): Promise<voi
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
+
+    // Idempotent: SEO zaten üretilmişse (resume) tekrar üretme.
+    if (run.seo) {
+      await updatePipelineRun(runId, { status: 'awaiting_seo_approval', attempts: 0, errorMessage: null });
+      return;
+    }
 
     await updatePipelineRun(runId, { generatedImageUrl: url, status: 'generating_seo', errorMessage: null });
 
@@ -120,7 +133,7 @@ export async function selectImageForRun(runId: string, url: string): Promise<voi
       competitorRef,
     );
 
-    await updatePipelineRun(runId, { seoJson: seo, status: 'awaiting_seo_approval' });
+    await updatePipelineRun(runId, { seoJson: seo, status: 'awaiting_seo_approval', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
   }
@@ -158,73 +171,95 @@ export async function approveSeoAndProcess(runId: string, seo: SeoData): Promise
 
     await updatePipelineRun(runId, { seoJson: seo, status: 'processing_files', errorMessage: null });
 
-    // 1) Upscale (clarity ×4; fal yoksa pass-through)
-    const selected = await readObject(keyFromUrl(run.generatedImageUrl));
-    const master = await upscale(selected);
-    const masterUrl = await putObject(`runs/${runId}/master.png`, master, 'image/png');
+    // 1) Master (upscale ×4) — zaten üretilmişse Spaces'ten oku (idempotent resume; tekrar upscale yok).
+    let masterUrl: string;
+    let master: Buffer;
+    if (run.upscaledImageUrl) {
+      masterUrl = run.upscaledImageUrl;
+      master = await readObject(keyFromUrl(masterUrl));
+    } else {
+      const selected = await readObject(keyFromUrl(run.generatedImageUrl));
+      master = await upscale(selected); // clarity ×4; fal yoksa pass-through
+      masterUrl = await putObject(`runs/${runId}/master.png`, master, 'image/png');
+    }
 
-    // Orientation'ı gerçek oran'dan doğrula.
+    // Orientation'ı gerçek oran'dan doğrula (deterministik — resume'da da aynı sonuç).
     const meta = await sharp(master).metadata();
     if (meta.width && meta.height) {
       seo = { ...seo, attributes: { ...seo.attributes, orientation: orientationFor(meta.width, meta.height) } };
       await updatePipelineRun(runId, { seoJson: seo });
     }
 
-    // 2) Dijital dosyalar: 5 JPG (300 DPI, <20MB)
-    const files = await packageJpegs(master);
-    const digitalFileUrls: Record<string, string> = {};
-    for (const f of files) {
-      digitalFileUrls[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
+    // 2) Dijital dosyalar: 5 JPG (300 DPI, <20MB) — zaten üretilmişse atla.
+    let digitalFileUrls = run.digitalFileUrls as Record<string, string> | undefined;
+    if (!digitalFileUrls || Object.keys(digitalFileUrls).length === 0) {
+      const files = await packageJpegs(master);
+      const map: Record<string, string> = {};
+      for (const f of files) {
+        map[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
+      }
+      digitalFileUrls = map;
     }
     await updatePipelineRun(runId, { upscaledImageUrl: masterUrl, digitalFileUrls });
 
-    // 3) Mockup'lar (8 sahne; fal hatalarına dayanıklı — boş slot kalabilir)
-    // HIZ: 27MB master yerine küçültülmüş kaynak (1536px JPEG) yüklenir — upload çok daha hızlı.
-    // Aynı kaynak yeniden-üret'te de kullanılır (tekrar 27MB upload edilmez).
-    const mockupSource = await sharp(master)
-      .resize(1536, 1536, { fit: 'inside' })
-      .jpeg({ quality: 90 })
-      .toBuffer();
-    await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
+    // Mevcut medyayı koru (resume): tamamlanmış mockup/video/ölçü tekrar üretilmez.
+    const media: MediaUrls = run.mediaUrls
+      ? { ...run.mediaUrls, mockups: [...(run.mediaUrls.mockups ?? [])] }
+      : { mockups: [] };
 
-    const media: MediaUrls = { mockups: [] };
-    try {
-      const results = await generateAllMockups(mockupSource);
-      const mockups: string[] = [];
-      for (const r of results) {
-        if (r.ok && r.buffer) {
-          mockups.push(await putObject(`runs/${runId}/mockup-${r.index}.jpg`, r.buffer, r.contentType ?? 'image/jpeg'));
-        } else {
-          mockups.push(''); // boş slot — gate 3'te yeniden üretilebilir
+    // 3) Mockup'lar (8 sahne) — mockups dizisi henüz hiç kaydedilmemişse üret.
+    // HIZ: 27MB master yerine küçültülmüş kaynak (1536px JPEG) yüklenir; aynı kaynak gate-3 regen'de kullanılır.
+    if (media.mockups.length === 0) {
+      const mockupSource = await sharp(master)
+        .resize(1536, 1536, { fit: 'inside' })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+      await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
+
+      try {
+        const results = await generateAllMockups(mockupSource);
+        const mockups: string[] = [];
+        for (const r of results) {
+          if (r.ok && r.buffer) {
+            mockups.push(await putObject(`runs/${runId}/mockup-${r.index}.jpg`, r.buffer, r.contentType ?? 'image/jpeg'));
+          } else {
+            mockups.push(''); // boş slot — gate 3'te yeniden üretilebilir
+          }
         }
+        media.mockups = mockups;
+      } catch (e) {
+        console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);
+        media.mockups = MOCKUP_SCENES.map(() => '');
       }
-      media.mockups = mockups;
-    } catch (e) {
-      console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);
-      media.mockups = MOCKUP_SCENES.map(() => '');
+      await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: mockup'lar
     }
 
-    // 4) Zoom video (birincil mockup, yoksa master'dan)
-    try {
-      const firstMockup = media.mockups.find((u) => u);
-      const source = firstMockup ? await readObject(keyFromUrl(firstMockup)) : master;
-      const video = await makeZoomVideo(source);
-      media.video = await putObject(`runs/${runId}/zoom.mp4`, video, 'video/mp4');
-    } catch (e) {
-      console.warn('[pipeline] video üretimi atlandı:', e instanceof Error ? e.message : e);
+    // 4) Zoom video (birincil mockup, yoksa master'dan) — yoksa üret.
+    if (!media.video) {
+      try {
+        const firstMockup = media.mockups.find((u) => u);
+        const source = firstMockup ? await readObject(keyFromUrl(firstMockup)) : master;
+        const video = await makeZoomVideo(source);
+        media.video = await putObject(`runs/${runId}/zoom.mp4`, video, 'video/mp4');
+        await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: video
+      } catch (e) {
+        console.warn('[pipeline] video üretimi atlandı:', e instanceof Error ? e.message : e);
+      }
     }
 
-    // 5) Sabit ölçü görseli
-    const sizeGuide = await getSizeGuide();
-    if (sizeGuide) {
-      media.sizeGuide = await putObject(
-        `runs/${runId}/size-guide.${sizeGuide.ext}`,
-        sizeGuide.buffer,
-        sizeGuide.contentType,
-      );
+    // 5) Sabit ölçü görseli — yoksa ekle.
+    if (!media.sizeGuide) {
+      const sizeGuide = await getSizeGuide();
+      if (sizeGuide) {
+        media.sizeGuide = await putObject(
+          `runs/${runId}/size-guide.${sizeGuide.ext}`,
+          sizeGuide.buffer,
+          sizeGuide.contentType,
+        );
+      }
     }
 
-    await updatePipelineRun(runId, { mediaUrls: media, status: 'awaiting_publish' });
+    await updatePipelineRun(runId, { mediaUrls: media, status: 'awaiting_publish', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
   }
@@ -266,63 +301,90 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
  * Kapı 3 onayı — Etsy taslak listing + öznitelikler + medya (9 görsel + video) + 5 JPG → aktive.
  * @param thumbnailIndex Seçilen mockup index'i; ilk yüklenir (Etsy birincil/thumbnail = ilk görsel).
  */
-export async function publishToEtsy(runId: string, price = 5.0, thumbnailIndex = 0): Promise<void> {
+export async function publishToEtsy(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
     if (!run.seo) throw new Error('SEO yok — önce SEO onaylanmalı.');
     if (!run.digitalFileUrls) throw new Error('Dijital dosyalar (JPG) yok — önce paketleme yapılmalı.');
 
-    await updatePipelineRun(runId, { status: 'publishing_etsy', errorMessage: null });
+    // Resume: parametreler önce çağrıdan, yoksa kalıcı checkpoint'ten, yoksa default.
+    // Böylece sweeper publishToEtsy(runId) ile yarım kalan yayını aynı fiyat/thumbnail ile sürdürür.
+    const pp: PublishProgress = { ...(run.publishProgress ?? {}) };
+    pp.price = price ?? pp.price ?? 5.0;
+    pp.thumbnailIndex = thumbnailIndex ?? pp.thumbnailIndex ?? 0;
+    const effThumb = pp.thumbnailIndex;
+
+    await updatePipelineRun(runId, { status: 'publishing_etsy', publishProgress: pp, errorMessage: null });
 
     const shopId = await getShopId();
     const taxonomyId = await getDigitalPrintsTaxonomyId();
     const seo = { ...run.seo, categoryId: String(taxonomyId) };
-    const listingId = await createDraftListing(shopId, seo, price);
 
-    // Öznitelikler
-    await setListingAttributes(shopId, listingId, taxonomyId, seo.attributes);
+    // 1) Taslak listing — varsa (checkpoint/etsyListingId) YENİDEN OLUŞTURMA (çift listing önlenir).
+    let listingId = pp.listingId ?? run.etsyListingId;
+    if (!listingId) {
+      listingId = await createDraftListing(shopId, seo, pp.price);
+      pp.listingId = listingId;
+      await updatePipelineRun(runId, { etsyListingId: listingId, publishProgress: pp });
+    }
 
-    // Görseller: seçilen thumbnail mockup'ı EN BAŞA al (Etsy ilk görseli birincil/thumbnail yapar),
-    // diğer mockup'lar, en sona ölçü görseli (thumbnail asla ölçü görseli olmaz).
+    // 2) Öznitelikler — bir kez.
+    if (!pp.attributesDone) {
+      await setListingAttributes(shopId, listingId, taxonomyId, seo.attributes);
+      pp.attributesDone = true;
+      await updatePipelineRun(runId, { publishProgress: pp });
+    }
+
+    // Görsel sırası: seçilen thumbnail mockup EN BAŞA (Etsy ilk görseli thumbnail yapar), diğerleri, en sona ölçü.
     const allMockups = run.mediaUrls?.mockups ?? [];
     const ordered: string[] = [];
-    if (allMockups[thumbnailIndex]) ordered.push(allMockups[thumbnailIndex]);
+    if (allMockups[effThumb]) ordered.push(allMockups[effThumb]);
     allMockups.forEach((u, i) => {
-      if (u && i !== thumbnailIndex) ordered.push(u);
+      if (u && i !== effThumb) ordered.push(u);
     });
-    // Açık rank ile yükle: seçilen mockup rank 1 (thumbnail), diğerleri sonra, ölçü görseli EN SON.
-    let rank = 1;
-    for (let i = 0; i < ordered.length; i++) {
+
+    // 3) Görseller — sıralı, her yüklemeden sonra checkpoint (imagesUploaded) → resume tam kaldığı yerden, çift upload yok.
+    for (let i = pp.imagesUploaded ?? 0; i < ordered.length; i++) {
       const buf = await readObject(keyFromUrl(ordered[i]));
-      await uploadListingImage(shopId, listingId, buf, `mockup-${i}.jpg`, 'image/jpeg', rank++);
-    }
-    if (run.mediaUrls?.sizeGuide) {
-      const buf = await readObject(keyFromUrl(run.mediaUrls.sizeGuide));
-      await uploadListingImage(shopId, listingId, buf, 'size-guide.jpg', 'image/jpeg', rank++);
+      await uploadListingImage(shopId, listingId, buf, `mockup-${i}.jpg`, 'image/jpeg', i + 1);
+      pp.imagesUploaded = i + 1;
+      await updatePipelineRun(runId, { publishProgress: pp });
     }
 
-    // Video
-    if (run.mediaUrls?.video) {
+    // 4) Ölçü görseli — görsellerden sonra, EN SON rank.
+    if (run.mediaUrls?.sizeGuide && !pp.sizeGuideDone) {
+      const buf = await readObject(keyFromUrl(run.mediaUrls.sizeGuide));
+      await uploadListingImage(shopId, listingId, buf, 'size-guide.jpg', 'image/jpeg', ordered.length + 1);
+      pp.sizeGuideDone = true;
+      await updatePipelineRun(runId, { publishProgress: pp });
+    }
+
+    // 5) Video — bir kez (best-effort; hata olsa da işaretlenir, yayını bloklamaz).
+    if (run.mediaUrls?.video && !pp.videoDone) {
       try {
         const vid = await readObject(keyFromUrl(run.mediaUrls.video));
         await uploadListingVideo(shopId, listingId, vid, 'zoom.mp4');
       } catch (e) {
         console.warn('[pipeline] video yüklenemedi:', e instanceof Error ? e.message : e);
       }
+      pp.videoDone = true;
+      await updatePipelineRun(runId, { publishProgress: pp });
     }
 
-    // Dijital dosyalar: 5 JPG — sıra önemsiz, paralel yükle (hız). etsyFetch throttle korur.
-    await Promise.all(
-      Object.entries(run.digitalFileUrls).map(async ([key, url]) => {
-        const buf = await readObject(keyFromUrl(url));
-        await uploadListingFile(shopId, listingId, buf, `${key.replace(/_/g, '-')}.jpg`, 'image/jpeg');
-      }),
-    );
+    // 6) Dijital dosyalar: 5 JPG — key bazlı checkpoint (resume'da yüklenmişleri atlar).
+    const uploadedFiles = new Set(pp.filesUploaded ?? []);
+    for (const [key, url] of Object.entries(run.digitalFileUrls)) {
+      if (uploadedFiles.has(key)) continue;
+      const buf = await readObject(keyFromUrl(url));
+      await uploadListingFile(shopId, listingId, buf, `${key.replace(/_/g, '-')}.jpg`, 'image/jpeg');
+      uploadedFiles.add(key);
+      pp.filesUploaded = [...uploadedFiles];
+      await updatePipelineRun(runId, { publishProgress: pp });
+    }
 
-    // Listing'i aktifleştirme: kullanıcı isteğiyle 'active' YAPILMIYOR — taslak (draft) olarak bırakılır.
-    // Yayın, Etsy panelinden manuel onayla yapılacak.
-    await updatePipelineRun(runId, { etsyListingId: listingId, status: 'done' });
+    // Listing 'active' YAPILMIYOR — taslak bırakılır; yayın Etsy panelinden manuel onayla yapılır.
+    await updatePipelineRun(runId, { etsyListingId: listingId, status: 'done', attempts: 0, publishProgress: pp });
   } catch (err) {
     await fail(runId, err);
   }

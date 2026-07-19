@@ -15,7 +15,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { DigitalFileUrls, ImageModel, MediaUrls, PipelineStatus, SeoData } from '@/types';
+import type { DigitalFileUrls, ImageModel, MediaUrls, PipelineStatus, PublishProgress, SeoData } from '@/types';
 
 // ────────────────────────────────────────────────────────────────────────────
 // oauth_tokens
@@ -54,6 +54,9 @@ export const pipelineRuns = pgTable('pipeline_runs', {
   seoJson: jsonb('seo_json').$type<SeoData>(),
   etsyListingId: bigint('etsy_listing_id', { mode: 'number' }),
   pinterestPinId: text('pinterest_pin_id'),
+  // Dayanıklılık: kurtarma sweeper'ının yeniden deneme sayacı + Etsy yayın checkpoint'i.
+  attempts: integer('attempts').default(0).notNull(),
+  publishProgress: jsonb('publish_progress').$type<PublishProgress>(),
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

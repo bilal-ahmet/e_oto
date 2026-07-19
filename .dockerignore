@@ -1,0 +1,26 @@
+# Build çıktıları / bağımlılıklar (imajda yeniden üretilir)
+node_modules
+.next
+
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Ortam / sırlar (App Platform env olarak verilir — imaja GİRMEZ)
+.env
+.env.local
+.env.*.local
+
+# Lokal disk depolama artefaktları (prod'da Spaces kullanılır)
+public/uploads
+
+# Log / geçici
+npm-debug.log*
+*.log
+
+# Docker & docs
+Dockerfile
+.dockerignore
+*.docx

@@ -57,6 +57,13 @@
       "when": 1782861317567,
       "tag": "0007_add_image_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784460782014,
+      "tag": "0008_add_resilience_columns",
+      "breakpoints": true
     }
   ]
 }

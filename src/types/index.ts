@@ -68,6 +68,21 @@ export interface SeoData {
   attributes: ListingAttributes;
 }
 
+/**
+ * Etsy yayın adımının (publishToEtsy) checkpoint'i — restart sonrası dayanıklı, idempotent resume için.
+ * Sweeper yarım kalan bir yayını kaldığı yerden sürdürür; çift listing/çift upload olmaz.
+ */
+export interface PublishProgress {
+  price?: number; // resume'da kullanmak üzere kalıcı yayın parametreleri
+  thumbnailIndex?: number;
+  listingId?: number; // taslak oluşturuldu (etsyListingId ile aynı) → resume'da yeniden oluşturma
+  attributesDone?: boolean; // öznitelikler yazıldı
+  imagesUploaded?: number; // ordered görsel dizisinden kaç mockup yüklendi (sıralı checkpoint)
+  sizeGuideDone?: boolean; // ölçü görseli yüklendi
+  videoDone?: boolean; // video yüklendi
+  filesUploaded?: string[]; // yüklenen dijital dosya key'leri (ratio_*)
+}
+
 export interface PipelineRun {
   id: string;
   status: PipelineStatus;
@@ -83,6 +98,8 @@ export interface PipelineRun {
   seo?: SeoData;
   etsyListingId?: number;
   pinterestPinId?: string;
+  attempts?: number; // kurtarma sweeper'ının bu run'ı kaç kez yeniden denediği
+  publishProgress?: PublishProgress; // publishing_etsy resume checkpoint'i
   errorMessage?: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601

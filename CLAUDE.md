@@ -323,7 +323,15 @@ Sonuçlar tahminidir, kesin satış rakamı değildir — bir sıralama/öncelik
 5. Etsy ve Pinterest developer app'lerini oluştur, redirect URI'leri yerel URL'e göre kaydet, OAuth akışlarını (`/api/auth/.../start` ve `/callback`) yerelde test et.
 6. Tüm parçalar tek tek doğrulandıktan sonra `pipeline/generate` + adım route'larında (`select-image`, `approve-seo`, `publish`) birleştir.
 
-**Mevcut durum (canlı doğrulandı):** Imagen + FLUX, Claude SEO, 5 ZIP paketleme, lokal depolama ve Etsy OAuth + yayın çalışıyor. Pinterest kapsam dışı; upscale pass-through. Depolama lokal disk (`public/uploads`), DB lokal Postgres.
+**Mevcut durum (canlı doğrulandı):** Imagen + FLUX, Claude SEO, 5 JPG paketleme, ve Etsy OAuth + yayın çalışıyor. Pinterest kapsam dışı; upscale pass-through (fal kredisi yoksa).
+
+**Canlıya alma (DigitalOcean) altyapısı eklendi:**
+- **Depolama** (`lib/storage`): env-seçmeli sürücü — `DO_SPACES_*` doluysa **S3 (Spaces, public-read)**, değilse lokal disk (dev). İmzalar sabit. `keyFromUrl` hem Spaces hem legacy `/uploads/` URL'ini çözer.
+- **DB SSL** (`lib/db/ssl.ts`): `DATABASE_SSL=true` ya da `sslmode=require` → SSL (opsiyonel `DATABASE_CA_CERT`). Managed PG için.
+- **Migration runner** (`scripts/migrate.ts`, `npm run db:migrate`, tsx): App Platform **PRE_DEPLOY job** çalıştırır. Migration `0008_add_resilience_columns` = `attempts` + `publish_progress`.
+- **Pipeline dayanıklılığı**: adımlar idempotent/resume; `publishToEtsy` `publish_progress` checkpoint'i ile çift-listing/çift-upload olmadan sürdürülür. `lib/pipeline/recovery.ts` + `cron/recovery.ts` (her 2 dk + startup) askıda kalan run'ları PG advisory lock ile sürdürür. `instrumentation.ts` boot'ta env fail-fast (`assertProdEnv`: prod'da Spaces zorunlu).
+- **Docker**: kök `Dockerfile` (multi-stage, node:22, tam node_modules → sharp/ffmpeg-static garanti), `.dockerignore`, `/api/health`. `.do/app.yaml` app spec template (web service + migrate job + domain).
+- **Deploy**: `instance_count:1` (cron + fire-and-forget). OAuth redirect + `PUBLIC_BASE_URL` custom domaine ayarlanır; Etsy panelinde redirect güncellenir.
 
 ## 12. Referans Doküman
 

@@ -5,7 +5,7 @@
  * updated_at: her UPDATE'te `updatedAt: new Date()` manuel eklenir.
  */
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from './index';
 import {
   competitorListings,
@@ -31,6 +31,7 @@ import type {
   MediaUrls,
   PipelineRun,
   PipelineStatus,
+  PublishProgress,
   SeoData,
 } from '@/types';
 
@@ -56,6 +57,8 @@ function rowToPipelineRun(row: PipelineRunRow): PipelineRun {
     seo: (row.seoJson as SeoData) ?? undefined,
     etsyListingId: row.etsyListingId ?? undefined,
     pinterestPinId: row.pinterestPinId ?? undefined,
+    attempts: row.attempts ?? 0,
+    publishProgress: (row.publishProgress as PublishProgress) ?? undefined,
     errorMessage: row.errorMessage ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -184,6 +187,8 @@ type PipelineRunUpdate = {
   seoJson?: SeoData;
   etsyListingId?: number;
   pinterestPinId?: string;
+  attempts?: number;
+  publishProgress?: PublishProgress;
   errorMessage?: string | null; // null → önceki hatayı temizle (yeniden çalıştırmada)
 };
 
@@ -209,6 +214,51 @@ export async function listPipelineRuns(limit = 50): Promise<PipelineRun[]> {
     .orderBy(desc(pipelineRuns.createdAt))
     .limit(limit);
   return rows.map(rowToPipelineRun);
+}
+
+/** Transient (askıda kalabilecek) durumlar — kurtarma sweeper bunları izler. */
+export const TRANSIENT_STATUSES: PipelineStatus[] = [
+  'generating_image',
+  'generating_seo',
+  'processing_files',
+  'publishing_etsy',
+];
+
+/**
+ * Bir transient statüde takılmış (updated_at eşiği geçmiş) run'ları döner — restart/çökme sonrası
+ * arka plan işi kaybolan run'lar. Sweeper bunları idempotent step fonksiyonlarıyla sürdürür.
+ */
+export async function listStalledRuns(olderThanMs: number): Promise<PipelineRun[]> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const rows = await db
+    .select()
+    .from(pipelineRuns)
+    .where(and(inArray(pipelineRuns.status, TRANSIENT_STATUSES), lt(pipelineRuns.updatedAt, cutoff)));
+  return rows.map(rowToPipelineRun);
+}
+
+/** attempts sayacını atomik artırır ve yeni değeri döner. */
+export async function incrementRunAttempts(id: string): Promise<number> {
+  const [row] = await db
+    .update(pipelineRuns)
+    .set({ attempts: sql`${pipelineRuns.attempts} + 1`, updatedAt: new Date() })
+    .where(eq(pipelineRuns.id, id))
+    .returning({ attempts: pipelineRuns.attempts });
+  return row?.attempts ?? 0;
+}
+
+/**
+ * PostgreSQL session-level advisory lock (best-effort). Sweeper'ı tek instance'ta çalıştırmak için;
+ * kilit alınamazsa (başka instance tutuyorsa) false döner. İş bitince releaseAdvisoryLock çağrılır.
+ */
+export async function tryAdvisoryLock(key: number): Promise<boolean> {
+  const res = await db.execute(sql`select pg_try_advisory_lock(${key}) as locked`);
+  const rows = (res as unknown as { rows: Array<{ locked: boolean }> }).rows;
+  return rows?.[0]?.locked === true;
+}
+
+export async function releaseAdvisoryLock(key: number): Promise<void> {
+  await db.execute(sql`select pg_advisory_unlock(${key})`);
 }
 
 // ── competitor_shops ──────────────────────────────────────────────────────────

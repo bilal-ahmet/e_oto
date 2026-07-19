@@ -9,5 +9,11 @@ export default defineConfig({
   dialect: 'postgresql',
   dbCredentials: {
     url: process.env.DATABASE_URL!,
+    // Managed PG için SSL (yalnızca drizzle-kit push/studio kullanılırsa devreye girer;
+    // prod migration'ı scripts/migrate.ts kendi SSL'li pool'uyla çalıştırır).
+    ssl:
+      process.env.DATABASE_SSL === 'true' || /[?&]sslmode=require/i.test(process.env.DATABASE_URL ?? '')
+        ? { rejectUnauthorized: false }
+        : undefined,
   },
 });
