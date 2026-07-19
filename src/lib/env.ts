@@ -9,6 +9,7 @@ import { z } from 'zod';
 const emptyToUndef = (v: unknown) => (v === '' ? undefined : v);
 const optStr = () => z.preprocess(emptyToUndef, z.string().min(1).optional());
 const optUrl = () => z.preprocess(emptyToUndef, z.string().url().optional());
+const optEmail = () => z.preprocess(emptyToUndef, z.string().email().optional());
 
 const schema = z.object({
   // Faz 2 — DB katmanı (zorunlu)
@@ -24,6 +25,7 @@ const schema = z.object({
   PINTEREST_CLIENT_ID: optStr(),
   PINTEREST_CLIENT_SECRET: optStr(),
   PINTEREST_REDIRECT_URI: optUrl(),
+  PINTEREST_BOARD_ID: optStr(), // pin oluşturulacak sabit board (v1: board seçim UI'ı yok)
 
   // Faz 4 — Görsel üretim (şimdi opsiyonel)
   GOOGLE_API_KEY: optStr(), // Imagen (Google AI Studio)
@@ -40,6 +42,9 @@ const schema = z.object({
 
   // Faz 5 — SEO / Claude (şimdi opsiyonel)
   ANTHROPIC_API_KEY: optStr(),
+
+  // Public marka sitesi (/, /privacy) — gizlilik politikası + footer iletişim adresi.
+  CONTACT_EMAIL: optEmail(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -94,6 +99,10 @@ export function assertProdEnv(): void {
     ['ETSY_CLIENT_ID', e.ETSY_CLIENT_ID],
     ['ETSY_CLIENT_SECRET', e.ETSY_CLIENT_SECRET],
     ['ETSY_REDIRECT_URI', e.ETSY_REDIRECT_URI],
+    ['PINTEREST_CLIENT_ID', e.PINTEREST_CLIENT_ID],
+    ['PINTEREST_CLIENT_SECRET', e.PINTEREST_CLIENT_SECRET],
+    ['PINTEREST_REDIRECT_URI', e.PINTEREST_REDIRECT_URI],
+    ['PINTEREST_BOARD_ID', e.PINTEREST_BOARD_ID],
   ];
   for (const [name, val] of recommended) {
     if (!val) console.warn(`[env] Uyarı: üretimde ${name} tanımlı değil — ilgili özellik çalışmayabilir.`);

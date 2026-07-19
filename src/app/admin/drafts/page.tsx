@@ -81,9 +81,9 @@ export default function DraftsPage() {
     }
   }
 
-  // Üretime taşı — /generate taslağı ?draft=<id> ile alıp SEO'dan itibaren otomatik başlatır.
+  // Üretime taşı — /admin/generate taslağı ?draft=<id> ile alıp SEO'dan itibaren otomatik başlatır.
   function continueWithDraft(id: string) {
-    router.push(`/generate?draft=${id}`);
+    router.push(`/admin/generate?draft=${id}`);
   }
 
   return (

@@ -14,7 +14,7 @@ import {
   tryAdvisoryLock,
   updatePipelineRun,
 } from '@/lib/db/queries';
-import { approveSeoAndProcess, publishToEtsy, selectImageForRun } from './run';
+import { approveSeoAndProcess, publishToEtsy, publishToPinterest, selectImageForRun } from './run';
 
 const STALL_MS = 15 * 60 * 1000; // 15 dk hareketsizlik → askıda say
 const MAX_ATTEMPTS = 5; // bu kadar kurtarma denemesinden sonra hata olarak işaretle
@@ -48,6 +48,9 @@ export async function recoverStalledRuns(): Promise<void> {
             break;
           case 'publishing_etsy':
             void publishToEtsy(run.id); // kalıcı publishProgress checkpoint'inden devam
+            break;
+          case 'publishing_pinterest':
+            void publishToPinterest(run.id); // checkpoint yok, tüm çağrı tekrarlanır
             break;
           case 'generating_image':
           default:

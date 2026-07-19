@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const LINKS = [
-  { href: '/', label: 'Panel' },
-  { href: '/generate', label: 'Üretim' },
-  { href: '/drafts', label: 'Taslaklar' },
-  { href: '/competitors', label: 'Rakip Analizi' },
+  { href: '/admin', label: 'Panel' },
+  { href: '/admin/generate', label: 'Üretim' },
+  { href: '/admin/drafts', label: 'Taslaklar' },
+  { href: '/admin/competitors', label: 'Rakip Analizi' },
 ];
 
 function isActive(pathname: string, href: string): boolean {
-  return href === '/' ? pathname === '/' : pathname.startsWith(href);
+  return href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 }
 
 export function Nav() {
@@ -19,7 +19,7 @@ export function Nav() {
   return (
     <header className="border-b border-zinc-200 bg-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4 sm:px-6">
-        <Link href="/" className="mr-4 flex items-center gap-2 font-semibold text-zinc-900">
+        <Link href="/admin" className="mr-4 flex items-center gap-2 font-semibold text-zinc-900">
           <span className="grid size-7 place-items-center rounded-md bg-rose-600 text-sm text-white">
             E
           </span>

@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
   const base = env.PUBLIC_BASE_URL.replace(/\/+$/, '');
 
   if (error) {
-    return NextResponse.redirect(`${base}/?etsy=error&reason=${encodeURIComponent(error)}`);
+    return NextResponse.redirect(`${base}/admin?etsy=error&reason=${encodeURIComponent(error)}`);
   }
 
   const verifier = req.cookies.get('etsy_pkce_verifier')?.value;
   const savedState = req.cookies.get('etsy_oauth_state')?.value;
 
   if (!code || !state || !verifier || !savedState || state !== savedState) {
-    return NextResponse.redirect(`${base}/?etsy=error&reason=state_mismatch`);
+    return NextResponse.redirect(`${base}/admin?etsy=error&reason=state_mismatch`);
   }
 
   try {
@@ -31,10 +31,10 @@ export async function GET(req: NextRequest) {
     await upsertOAuthToken('etsy', tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
   } catch (e) {
     const reason = e instanceof Error ? e.message : 'token_exchange_failed';
-    return NextResponse.redirect(`${base}/?etsy=error&reason=${encodeURIComponent(reason)}`);
+    return NextResponse.redirect(`${base}/admin?etsy=error&reason=${encodeURIComponent(reason)}`);
   }
 
-  const res = NextResponse.redirect(`${base}/?etsy=connected`);
+  const res = NextResponse.redirect(`${base}/admin?etsy=connected`);
   res.cookies.delete('etsy_pkce_verifier');
   res.cookies.delete('etsy_oauth_state');
   return res;

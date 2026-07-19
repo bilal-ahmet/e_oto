@@ -222,6 +222,7 @@ export const TRANSIENT_STATUSES: PipelineStatus[] = [
   'generating_seo',
   'processing_files',
   'publishing_etsy',
+  'publishing_pinterest',
 ];
 
 /**

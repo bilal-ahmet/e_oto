@@ -46,7 +46,7 @@ export default async function DashboardPage() {
           description="Üretim hattı durumu ve rakip fırsatlarına genel bakış."
         />
         <Link
-          href="/drafts"
+          href="/admin/drafts"
           className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
         >
           Taslaklar →
@@ -66,7 +66,7 @@ export default async function DashboardPage() {
         <section className="lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-zinc-900">Son çalıştırmalar</h2>
-            <Link href="/generate" className="text-sm font-medium text-rose-600 hover:text-rose-700">
+            <Link href="/admin/generate" className="text-sm font-medium text-rose-600 hover:text-rose-700">
               Yeni üretim →
             </Link>
           </div>
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-zinc-900">En iyi fırsatlar</h2>
             <Link
-              href="/competitors"
+              href="/admin/competitors"
               className="text-sm font-medium text-rose-600 hover:text-rose-700"
             >
               Tümü →

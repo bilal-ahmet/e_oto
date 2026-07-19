@@ -53,4 +53,5 @@ export const PIPELINE_ORDER: PipelineStatus[] = [
   'awaiting_publish',
   'publishing_etsy',
   'done',
+  'publishing_pinterest',
 ];

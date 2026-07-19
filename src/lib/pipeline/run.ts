@@ -21,6 +21,7 @@ import { packageJpegs } from '@/lib/packaging/resize-and-export';
 import { generateAllMockups, generateMockup } from '@/lib/mockup/client';
 import { MOCKUP_SCENES } from '@/lib/mockup/scenes';
 import { uploadBuffer } from '@/lib/fal';
+import { createPin } from '@/lib/pinterest/pins';
 import { makeZoomVideo } from '@/lib/video/zoom';
 import { getSizeGuide } from '@/lib/listing/size-guide';
 import {
@@ -385,6 +386,37 @@ export async function publishToEtsy(runId: string, price?: number, thumbnailInde
 
     // Listing 'active' YAPILMIYOR — taslak bırakılır; yayın Etsy panelinden manuel onayla yapılır.
     await updatePipelineRun(runId, { etsyListingId: listingId, status: 'done', attempts: 0, publishProgress: pp });
+  } catch (err) {
+    await fail(runId, err);
+  }
+}
+
+/**
+ * Pinterest'te pin oluşturur — Etsy yayınından SONRA, kullanıcı Etsy panelinden listing'i kendisi
+ * aktive ettikten sonra elle tetiklenir (Etsy adımı listing'i bilerek taslak bırakıyor; taslak/
+ * yayında-olmayan bir listing'e pin atmak ölü link üretir, bu yüzden otomatik zincirlenmez).
+ * Etsy adımının aksine tek atomik `POST /pins` çağrısıdır — checkpoint yok, resume tüm işlemi tekrarlar.
+ */
+export async function publishToPinterest(runId: string): Promise<void> {
+  try {
+    const run = await getPipelineRun(runId);
+    if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
+    if (!run.etsyListingId) throw new Error('Önce Etsy yayını tamamlanmalı.');
+    if (run.pinterestPinId) throw new Error("Bu run zaten Pinterest'te pinlenmiş.");
+
+    await updatePipelineRun(runId, { status: 'publishing_pinterest', errorMessage: null });
+
+    const mockups = run.mediaUrls?.mockups ?? [];
+    const idx = run.publishProgress?.thumbnailIndex ?? 0;
+    const imageUrl = mockups[idx] || mockups.find((u) => u);
+    if (!imageUrl) throw new Error('Pinlenecek bir mockup görseli bulunamadı.');
+
+    const listingUrl = `https://www.etsy.com/listing/${run.etsyListingId}`;
+    const title = (run.seo?.title ?? 'Printable Wall Art').slice(0, 100);
+    const description = run.seo?.hook?.slice(0, 500);
+
+    const pinId = await createPin(imageUrl, listingUrl, title, description);
+    await updatePipelineRun(runId, { pinterestPinId: pinId, status: 'done', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
   }

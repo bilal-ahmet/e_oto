@@ -175,11 +175,11 @@ export default function GeneratePage() {
     };
   }, []);
 
-  // /drafts → "Bu taslakla devam et" buraya ?draft=<id> ile yönlendirir; otomatik başlat.
+  // /admin/drafts → "Bu taslakla devam et" buraya ?draft=<id> ile yönlendirir; otomatik başlat.
   useEffect(() => {
     const draftId = new URLSearchParams(window.location.search).get('draft');
     if (!draftId) return;
-    window.history.replaceState(null, '', '/generate'); // URL'i temizle
+    window.history.replaceState(null, '', '/admin/generate'); // URL'i temizle
     let active = true;
     (async () => {
       try {
@@ -392,6 +392,7 @@ export default function GeneratePage() {
   const approveSeo = (seo: SeoData) => postStep('/api/pipeline/approve-seo', { seo });
   const publish = (price: number, thumbnailIndex: number) =>
     postStep('/api/pipeline/publish', { price, thumbnailIndex });
+  const pinPinterest = () => postStep('/api/pipeline/publish-pinterest', {});
 
   // Tek mockup yeniden üretimi — status awaiting_publish'te kalır; SADECE ilgili küçük resmi
   // spinner'a alıp o mockup URL'i değişene kadar polling eder (global ekran değişmez).
@@ -730,7 +731,9 @@ export default function GeneratePage() {
       ) : null}
 
       {/* Tamamlandı */}
-      {status === 'done' && run ? <DoneView run={run} onReset={reset} /> : null}
+      {status === 'done' && run ? (
+        <DoneView run={run} onReset={reset} onPinPinterest={pinPinterest} pinning={busy} />
+      ) : null}
 
       {/* Hata */}
       {status === 'error' && run ? (
@@ -1049,7 +1052,17 @@ function PublishReview({
   );
 }
 
-function DoneView({ run, onReset }: { run: PipelineRun; onReset: () => void }) {
+function DoneView({
+  run,
+  onReset,
+  onPinPinterest,
+  pinning,
+}: {
+  run: PipelineRun;
+  onReset: () => void;
+  onPinPinterest: () => void;
+  pinning: boolean;
+}) {
   return (
     <Card>
       <div className="flex items-center gap-2 text-green-700">
@@ -1069,8 +1082,32 @@ function DoneView({ run, onReset }: { run: PipelineRun; onReset: () => void }) {
         </div>
       </dl>
       {run.seo ? <SeoSummary seo={run.seo} /> : null}
-      <div className="mt-5">
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <Button onClick={onReset}>Yeni üretim</Button>
+        {run.pinterestPinId ? (
+          <a
+            href={`https://www.pinterest.com/pin/${run.pinterestPinId}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-rose-600 hover:text-rose-700"
+          >
+            ✓ Pinterest&apos;te pinlendi →
+          </a>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onPinPinterest} disabled={pinning}>
+              {pinning ? <Spinner /> : null}
+              {pinning ? 'Pinleniyor…' : "Pinterest'te pinle"}
+            </Button>
+            <a
+              href="/api/auth/pinterest/start"
+              className="text-xs text-zinc-400 hover:text-zinc-600"
+            >
+              Pinterest hesabını bağla
+            </a>
+          </>
+        )}
       </div>
     </Card>
   );
