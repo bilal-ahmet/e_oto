@@ -75,7 +75,7 @@ services:
     dockerfile_path: Dockerfile
     source_dir: /
     github:
-      repo: bilal-ahmet/e-oto
+      repo: bilal-ahmet/e_oto
       branch: main
       deploy_on_push: true
     http_port: 3000
@@ -91,14 +91,14 @@ services:
 jobs:
   - name: migrate
     kind: PRE_DEPLOY
-    dockerfile_path: Dockerfile
-    source_dir: /
+    environment_slug: node-js
     github:
-      repo: bilal-ahmet/e-oto
+      repo: bilal-ahmet/e_oto
       branch: main
+    source_dir: /
     run_command: npm run db:migrate
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: apps-s-1vcpu-0.5gb
 
 # ── Custom domain ───────────────────────────────────────────────────────────────
 domains:
