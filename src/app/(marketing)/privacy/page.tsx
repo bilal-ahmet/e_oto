@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
-import { env } from '@/lib/env';
+import { publicBranding } from '@/lib/env';
 import { EmailLink } from '@/components/EmailLink';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy — Velora Art Designs',
 };
 
-const CONTACT_EMAIL = env.CONTACT_EMAIL ?? 'contact@bbfcreative.com.tr';
+const CONTACT_EMAIL = publicBranding.contactEmail;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Fraunces } from 'next/font/google';
-import { env } from '@/lib/env';
+import { publicBranding } from '@/lib/env';
 import { EmailLink } from '@/components/EmailLink';
 
 const fraunces = Fraunces({
@@ -9,8 +9,8 @@ const fraunces = Fraunces({
   axes: ['opsz'],
 });
 
-const SHOP_URL = `https://www.etsy.com/shop/${env.ETSY_SHOP_NAME}`;
-const CONTACT_EMAIL = env.CONTACT_EMAIL ?? 'contact@bbfcreative.com.tr';
+const SHOP_URL = `https://www.etsy.com/shop/${publicBranding.shopName}`;
+const CONTACT_EMAIL = publicBranding.contactEmail;
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -35,7 +35,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
 
       <footer className="border-t border-[#ddd2ba]">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-8 text-xs text-[#5c5347] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p>© {new Date().getFullYear()} {env.ETSY_SHOP_NAME}. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {publicBranding.shopName}. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-[#241f1c]">
               Privacy Policy

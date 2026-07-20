@@ -1,6 +1,6 @@
-import { env } from '@/lib/env';
+import { publicBranding } from '@/lib/env';
 
-const SHOP_URL = `https://www.etsy.com/shop/${env.ETSY_SHOP_NAME}`;
+const SHOP_URL = `https://www.etsy.com/shop/${publicBranding.shopName}`;
 
 const GALLERY = [
   { no: '01', title: 'Dune Study', from: '#c9a27a', to: '#a9764a' },

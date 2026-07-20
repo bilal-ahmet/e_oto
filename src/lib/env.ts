@@ -11,6 +11,9 @@ const optStr = () => z.preprocess(emptyToUndef, z.string().min(1).optional());
 const optUrl = () => z.preprocess(emptyToUndef, z.string().url().optional());
 const optEmail = () => z.preprocess(emptyToUndef, z.string().email().optional());
 
+const DEFAULT_SHOP_NAME = 'VeloraArtDesigns';
+const DEFAULT_CONTACT_EMAIL = 'contact@bbfcreative.com.tr';
+
 const schema = z.object({
   // Faz 2 — DB katmanı (zorunlu)
   DATABASE_URL: z.string().url('DATABASE_URL geçerli bir PostgreSQL URL olmalı'),
@@ -30,7 +33,7 @@ const schema = z.object({
   // Faz 4 — Görsel üretim (şimdi opsiyonel)
   GOOGLE_API_KEY: optStr(), // Imagen (Google AI Studio)
   FAL_KEY: optStr(), // fal.ai — FLUX.1 Kontext [pro] + clarity-upscaler
-  ETSY_SHOP_NAME: z.preprocess(emptyToUndef, z.string().default('VeloraArtDesigns')), // açıklama TERMS/telif
+  ETSY_SHOP_NAME: z.preprocess(emptyToUndef, z.string().default(DEFAULT_SHOP_NAME)), // açıklama TERMS/telif
   // Lokal disk depolama için public URL tabanı (DO Spaces yoksa).
   PUBLIC_BASE_URL: z.preprocess(emptyToUndef, z.string().url().default('http://localhost:3000')),
   DO_SPACES_KEY: optStr(),
@@ -108,6 +111,24 @@ export function assertProdEnv(): void {
     if (!val) console.warn(`[env] Uyarı: üretimde ${name} tanımlı değil — ilgili özellik çalışmayabilir.`);
   }
 }
+
+/**
+ * Public marka değerleri — tam şema doğrulaması YAPMADAN okunur.
+ *
+ * NEDEN: `env` proxy'sine herhangi bir erişim TÜM şemayı doğrular, yani DATABASE_URL /
+ * TOKEN_ENCRYPTION_KEY gibi runtime secret'larını zorunlu kılar. Marketing sayfaları
+ * (`/`, `/privacy`) build sırasında statik render edildiğinden, orada `env` kullanmak
+ * build'i secret'lara bağımlı hale getirir ve secret'sız ortamda `next build`'i düşürür.
+ * Bu değerler gizli değil ve makul default'ları var — düz process.env yeterli.
+ */
+export const publicBranding = {
+  get shopName(): string {
+    return process.env.ETSY_SHOP_NAME || DEFAULT_SHOP_NAME;
+  },
+  get contactEmail(): string {
+    return process.env.CONTACT_EMAIL || DEFAULT_CONTACT_EMAIL;
+  },
+};
 
 // Convenience proxy: env.DATABASE_URL şeklinde erişim sağlar, lazy validate eder.
 export const env = new Proxy({} as Env, {

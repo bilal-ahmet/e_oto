@@ -10,62 +10,71 @@ region: fra # Spaces/DB ile aynı bölge önerilir (fra1)
 
 # ── Tüm bileşenlerce paylaşılan ortam değişkenleri ──────────────────────────────
 # type: SECRET olanların DEĞERİ panelde girilir (aşağıda value yok). Diğerleri düz config.
+#
+# scope: RUN_TIME (BUILD değil) — iki sebep:
+#   1) `next build` hiçbir runtime secret'ına ihtiyaç duymaz (env erişimleri tembel;
+#      bkz. lib/db/index.ts ve lib/env.ts publicBranding). Secret'sız build doğrulandı.
+#   2) Dockerfile build'lerinde BUILD_TIME değişkenleri docker build-arg olarak geçer ve
+#      imaj katmanlarına sızabilir. Secret'ları imaja gömmüyoruz.
+# NOT: ETSY_SHOP_NAME / CONTACT_EMAIL marketing sayfalarında (statik prerender) kullanılır;
+# RUN_TIME olduklarından build'de lib/env.ts'teki DEFAULT_* değerleri gömülür. Değiştirmek
+# isterseniz oradaki default'u güncelleyin (yalnızca kozmetik marka metni).
 envs:
   - key: DATABASE_URL
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: DATABASE_SSL
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "true"
   # DO Managed PG "CA certificate"ını doğrulamak için (opsiyonel ama önerilir):
   # - key: DATABASE_CA_CERT
   #   scope: RUN_AND_BUILD_TIME
   #   type: SECRET
   - key: TOKEN_ENCRYPTION_KEY
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: ANTHROPIC_API_KEY
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: FAL_KEY
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: GOOGLE_API_KEY
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: ETSY_CLIENT_ID
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: ETSY_CLIENT_SECRET
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: ETSY_REDIRECT_URI
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "https://bbfcreative.com.tr/api/auth/etsy/callback"
   - key: ETSY_SHOP_NAME
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "VeloraArtDesigns"
   - key: PUBLIC_BASE_URL
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "https://bbfcreative.com.tr"
   # DO Spaces (üretimde ZORUNLU — ephemeral disk yerine kalıcı depolama):
   - key: DO_SPACES_KEY
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: DO_SPACES_SECRET
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     type: SECRET
   - key: DO_SPACES_BUCKET
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "etsy-otomasyon-assets"
   - key: DO_SPACES_REGION
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "fra1"
   - key: DO_SPACES_ENDPOINT
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "https://fra1.digitaloceanspaces.com"
   - key: COMPETITOR_CRON_ENABLED
-    scope: RUN_AND_BUILD_TIME
+    scope: RUN_TIME
     value: "true"
   # PIPELINE_RECOVERY_ENABLED varsayılan açık; kapatmak için "false" verin.
 
@@ -91,7 +100,10 @@ services:
 jobs:
   - name: migrate
     kind: PRE_DEPLOY
-    environment_slug: node-js
+    # Web servisiyle AYNI Dockerfile imajı. Buildpack (environment_slug) KULLANMA:
+    # node-js buildpack build sonrası devDependency'leri budar ve `tsx` (db:migrate'in
+    # çalıştırıcısı) devDependency olduğundan job "tsx: not found" ile düşer.
+    dockerfile_path: Dockerfile
     github:
       repo: bilal-ahmet/e_oto
       branch: main
