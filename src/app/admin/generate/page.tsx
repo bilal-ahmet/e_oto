@@ -97,6 +97,21 @@ async function fileToBase64(file: File): Promise<{ base64: string; mediaType: st
   return { base64: btoa(binary), mediaType: file.type || 'image/png' };
 }
 
+/**
+ * Yanıtı JSON olarak okur; gövde boş/JSON değilse HTTP durumunu içeren anlaşılır bir hata atar.
+ * (Next.js production'da yakalanmamış route hatası GÖVDESİZ 500 döner — düz `res.json()`
+ * bunu "Unexpected end of JSON input" diye maskeleyip asıl sebebi gizler.)
+ */
+async function readJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text) throw new Error(`Sunucu boş yanıt döndü (HTTP ${res.status}). Sunucu loglarına bakın.`);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Sunucu JSON olmayan yanıt döndü (HTTP ${res.status}): ${text.slice(0, 200)}`);
+  }
+}
+
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState<ImageModel>('flux');
@@ -188,7 +203,7 @@ export default function GeneratePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ draftId }),
         });
-        const data: PipelineRun & { error?: string } = await res.json();
+        const data = await readJson<PipelineRun & { error?: string }>(res);
         if (!active) return;
         if (!res.ok && res.status !== 202) {
           setError(data.error ?? 'Taslaktan başlatılamadı.');
@@ -196,8 +211,8 @@ export default function GeneratePage() {
         }
         setRun(data);
         poll(data.id);
-      } catch {
-        if (active) setError('Taslaktan başlatılamadı.');
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : 'Taslaktan başlatılamadı.');
       }
     })();
     return () => {
@@ -258,7 +273,7 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftId, competitorResearchId: research?.id }),
       });
-      const data: PipelineRun & { error?: string } = await res.json();
+      const data = await readJson<PipelineRun & { error?: string }>(res);
       if (!res.ok && res.status !== 202) throw new Error(data.error ?? 'Taslaktan başlatılamadı.');
       setRun(data);
       poll(data.id);
@@ -327,7 +342,7 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ referenceImage, note: note.trim() || undefined }),
       });
-      const data: { instruction?: string; error?: string } = await res.json();
+      const data = await readJson<{ instruction?: string; error?: string }>(res);
       if (!res.ok || !data.instruction) throw new Error(data.error ?? 'Talimat üretilemedi.');
       setPrompt(data.instruction);
     } catch (e) {
@@ -354,7 +369,7 @@ export default function GeneratePage() {
           competitorResearchId: research?.id,
         }),
       });
-      const data: PipelineRun & { error?: string } = await res.json();
+      const data = await readJson<PipelineRun & { error?: string }>(res);
       if (!res.ok && res.status !== 202) throw new Error(data.error ?? 'Üretim başarısız.');
       setRun(data);
       poll(data.id);
@@ -377,7 +392,7 @@ export default function GeneratePage() {
         body: JSON.stringify({ id: run.id, ...payload }),
       });
       if (!res.ok && res.status !== 202) {
-        const data = await res.json().catch(() => ({}));
+        const data = await readJson<{ error?: string }>(res);
         throw new Error(data.error ?? 'İşlem başarısız.');
       }
       poll(run.id);

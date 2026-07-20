@@ -18,6 +18,18 @@ const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const MODELS: ImageModel[] = ['imagen', 'flux'];
 
 export async function POST(req: NextRequest) {
+  // Yakalanmamış hata Next.js production'da GÖVDESİZ 500 döner ve UI'da
+  // "Unexpected end of JSON input" olarak görünür — asıl sebebi JSON'a çevirip yüzeye çıkar.
+  try {
+    return await handle(req);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Bilinmeyen sunucu hatası.';
+    console.error('[pipeline/generate] beklenmeyen hata:', e);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function handle(req: NextRequest) {
   let body: {
     prompt?: string;
     model?: string;
