@@ -29,7 +29,38 @@ async function main(): Promise<void> {
   }
 }
 
+/**
+ * Hatayı TÜM zinciriyle basar. drizzle sorgu hatalarını `Failed query: ...` diye sarmalar ve
+ * asıl PostgreSQL hatasını (code/detail/hint — teşhis için gereken her şey) `cause` içine koyar;
+ * yalnızca `message` basmak bu bilgiyi yutar.
+ */
+function describeError(err: unknown, depth = 0): string {
+  const pad = '  '.repeat(depth);
+  if (!(err instanceof Error)) return `${pad}${String(err)}`;
+
+  const lines = [`${pad}${err.name}: ${err.message}`];
+
+  // node-postgres hata alanları (varsa) — asıl teşhis burada.
+  const pg = err as Error & {
+    code?: string;
+    detail?: string;
+    hint?: string;
+    severity?: string;
+    routine?: string;
+  };
+  for (const field of ['code', 'severity', 'detail', 'hint', 'routine'] as const) {
+    if (pg[field]) lines.push(`${pad}  ${field}: ${pg[field]}`);
+  }
+
+  if (err.cause !== undefined) {
+    lines.push(`${pad}  cause:`);
+    lines.push(describeError(err.cause, depth + 2));
+  }
+  return lines.join('\n');
+}
+
 main().catch((err) => {
-  console.error('[migrate] HATA:', err instanceof Error ? err.message : err);
+  console.error('[migrate] HATA:\n' + describeError(err));
+  if (err instanceof Error && err.stack) console.error(err.stack);
   process.exit(1);
 });
