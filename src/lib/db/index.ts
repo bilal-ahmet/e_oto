@@ -21,6 +21,15 @@ declare global {
   var __pgPool: Pool | undefined;
 }
 
+/**
+ * Ham Pool — session'a bağlı işlemler için (örn. `pg_advisory_lock`: kilit onu ALAN bağlantıya
+ * aittir, başka bir bağlantıdan `unlock` çağırmak sessizce başarısız olur). Bu tür işlerde
+ * `pool.connect()` ile TEK bir client alınmalı; `db` (drizzle) her sorguda farklı client kullanabilir.
+ */
+export function pgPool(): Pool {
+  return getPool();
+}
+
 function getPool(): Pool {
   return (globalThis.__pgPool ??= new Pool({
     // sslmode connection string'den ayıklanır — SSL yalnızca aşağıdaki açık `ssl` objesiyle kontrol edilir

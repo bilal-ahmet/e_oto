@@ -82,16 +82,30 @@ export function assertProdEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
   const e = getEnv();
 
-  const spacesComplete =
-    e.DO_SPACES_KEY && e.DO_SPACES_SECRET && e.DO_SPACES_BUCKET && e.DO_SPACES_REGION && e.DO_SPACES_ENDPOINT;
-  if (!spacesComplete) {
+  // EKSİK OLANLARI ADIYLA bildir — "DO_SPACES_* eksik" demek, beşinden hangisinin boş
+  // olduğunu aramak için bir deploy turu daha harcatır.
+  const missingSpaces = (
+    [
+      ['DO_SPACES_KEY', e.DO_SPACES_KEY],
+      ['DO_SPACES_SECRET', e.DO_SPACES_SECRET],
+      ['DO_SPACES_BUCKET', e.DO_SPACES_BUCKET],
+      ['DO_SPACES_REGION', e.DO_SPACES_REGION],
+      ['DO_SPACES_ENDPOINT', e.DO_SPACES_ENDPOINT],
+    ] as const
+  )
+    .filter(([, val]) => !val)
+    .map(([name]) => name);
+
+  if (missingSpaces.length > 0) {
     // PUBLIC_BASE_URL hâlâ localhost ise gerçek bir deploy değil (dev'de `next start` denemesi) → sert hata atma.
     const isLocal = /localhost|127\.0\.0\.1/.test(e.PUBLIC_BASE_URL);
     if (isLocal) {
       console.warn('[env] Üretim modu ama PUBLIC_BASE_URL localhost — Spaces zorunluluğu atlandı (lokal test).');
     } else {
       throw new Error(
-        'Üretimde DO_SPACES_* eksik — App Platform diski ephemeral olduğundan dosyalar kaybolur. Spaces yapılandırın.',
+        `Üretimde şu Spaces değişkenleri boş: ${missingSpaces.join(', ')} — ` +
+          'App Platform diski ephemeral olduğundan dosyalar kaybolur. ' +
+          'DO panelinde App → Settings → App-Level Environment Variables altında bu değerleri girin.',
       );
     }
   }

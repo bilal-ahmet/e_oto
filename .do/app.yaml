@@ -89,7 +89,10 @@ services:
       deploy_on_push: true
     http_port: 3000
     instance_count: 1 # cron + fire-and-forget iş → tek instance (advisory lock ileride 2+'ya izin verir)
-    instance_size_slug: basic-xs
+    # basic-xs (1 GB) YETMİYOR: 5 JPG paketleme adımı 77 megapiksellik pipeline'lar çalıştırıyor.
+    # Düzeltmelerden sonra tepe RSS ~200-400 MB'a indi ama Next.js tabanı + ffmpeg + Spaces
+    # buffer'ları ile pay bırakmak gerekiyor. basic-s = 2 GB / 1 vCPU.
+    instance_size_slug: basic-s
     health_check:
       http_path: /api/health
       initial_delay_seconds: 20

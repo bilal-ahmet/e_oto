@@ -21,6 +21,13 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# KRİTİK — libuv thread pool boyutu (varsayılan 4).
+# sharp işleri bu havuzu tutar; `dns.lookup` de aynı havuzdadır. Havuz dolduğunda yeni her
+# Postgres/Spaces/fal/Etsy bağlantısı kuyruğa girer (ölçüm: 4 ms yerine 28.6 s) ve
+# /api/pipeline/status gateway timeout'una (504/524) düşer. Havuzu büyütmek görsel işini
+# ağ/dosya I/O'sundan ayırır. sharp eşzamanlılığı ayrıca lib/image/sharp.ts'te sınırlanır.
+ENV UV_THREADPOOL_SIZE=8
+
 # Tam node_modules + build çıktısı + asset'ler (sharp/ffmpeg-static runtime'da garanti mevcut).
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next

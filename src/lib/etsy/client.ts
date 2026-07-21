@@ -7,6 +7,7 @@
 
 import pThrottle from 'p-throttle';
 import { getEnv } from '@/lib/env';
+import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 import { getOAuthToken, upsertOAuthToken } from '@/lib/db/queries';
 import { refreshAccessToken } from './oauth';
 
@@ -45,8 +46,11 @@ interface EtsyFetchOptions {
   form?: Record<string, string | number>;
 }
 
+// Zaman aşımlı: Etsy medya yüklemeleri (görsel/video/dosya) yanıtsız kalırsa yayın adımı
+// `publishing_etsy`'de asılı kalmasın — checkpoint zaten yüklenenleri koruyor, tekrar denenebilir.
 const rawFetch = throttle(
-  async (url: string, init: RequestInit): Promise<Response> => fetch(url, init),
+  async (url: string, init: RequestInit): Promise<Response> =>
+    fetchWithTimeout(url, init, TIMEOUTS.etsy, 'Etsy API çağrısı'),
 );
 
 /**

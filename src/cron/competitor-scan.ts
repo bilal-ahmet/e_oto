@@ -5,11 +5,7 @@
  */
 
 import cron from 'node-cron';
-import {
-  listCompetitorShops,
-  releaseAdvisoryLock,
-  tryAdvisoryLock,
-} from '@/lib/db/queries';
+import { listCompetitorShops, withAdvisoryLock } from '@/lib/db/queries';
 import { scanCompetitor } from '@/lib/scoring/competitor-algorithm';
 
 let registered = false;
@@ -17,21 +13,21 @@ const SCAN_LOCK_KEY = 728_402; // rakip tarama advisory lock (recovery'den farkl
 
 async function runScanAll(): Promise<void> {
   // Advisory lock: birden fazla instance olsa bile tarama tek sefer çalışır.
-  if (!(await tryAdvisoryLock(SCAN_LOCK_KEY))) return;
+  // (Kilit alma/bırakma aynı bağlantıda — bkz. withAdvisoryLock.)
   try {
-    const shops = await listCompetitorShops();
-    for (const shop of shops) {
-      try {
-        await scanCompetitor({ shopId: shop.shopId });
-      } catch (e) {
-        console.error(`[cron] ${shop.shopName} tarama hatası:`, e instanceof Error ? e.message : e);
+    await withAdvisoryLock(SCAN_LOCK_KEY, async () => {
+      const shops = await listCompetitorShops();
+      for (const shop of shops) {
+        try {
+          await scanCompetitor({ shopId: shop.shopId });
+        } catch (e) {
+          console.error(`[cron] ${shop.shopName} tarama hatası:`, e instanceof Error ? e.message : e);
+        }
       }
-    }
-    console.log(`[cron] rakip tarama tamam — ${shops.length} mağaza.`);
+      console.log(`[cron] rakip tarama tamam — ${shops.length} mağaza.`);
+    });
   } catch (e) {
     console.error('[cron] rakip tarama başlatılamadı:', e instanceof Error ? e.message : e);
-  } finally {
-    await releaseAdvisoryLock(SCAN_LOCK_KEY);
   }
 }
 

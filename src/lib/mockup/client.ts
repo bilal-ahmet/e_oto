@@ -4,7 +4,8 @@
  * Yalnızca server-side import edilir.
  */
 
-import { getFal, uploadBuffer, downloadImage } from '@/lib/fal';
+import { falSubscribe, uploadBuffer, downloadImage } from '@/lib/fal';
+import { TIMEOUTS } from '@/lib/async/timeout';
 import { MOCKUP_SCENES, type MockupScene } from './scenes';
 
 const MODEL = 'fal-ai/flux-pro/kontext';
@@ -23,8 +24,9 @@ export async function generateMockup(
   scene: MockupScene,
   seed?: number,
 ): Promise<{ buffer: Buffer; contentType: string }> {
-  const result = await getFal().subscribe(MODEL, {
-    input: {
+  const data = await falSubscribe<{ images?: KontextImage[] }>(
+    MODEL,
+    {
       image_url: masterUrl,
       prompt: scene.prompt,
       num_images: 1,
@@ -32,8 +34,10 @@ export async function generateMockup(
       output_format: 'jpeg',
       seed: seed ?? Math.floor(Math.random() * 2_000_000_000),
     },
-  });
-  const img = ((result.data?.images ?? []) as KontextImage[])[0];
+    TIMEOUTS.mockup,
+    `mockup (${scene.key})`,
+  );
+  const img = (data.images ?? [])[0];
   if (!img?.url) throw new Error(`Mockup üretilemedi (sahne: ${scene.key}).`);
   return downloadImage(img.url);
 }

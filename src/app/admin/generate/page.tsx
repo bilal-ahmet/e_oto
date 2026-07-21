@@ -124,6 +124,7 @@ export default function GeneratePage() {
   const [run, setRun] = useState<PipelineRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollWarning, setPollWarning] = useState<string | null>(null); // durum sorgusu yanıt vermiyor
   const [regenIndex, setRegenIndex] = useState<number | null>(null); // yeniden üretilen mockup
   const [drafts, setDrafts] = useState<ImageDraft[]>([]); // kaydedilmiş görsel taslakları
   const [draftBusy, setDraftBusy] = useState(false); // taslak işlemi (devam/sil/yükle) sürüyor
@@ -136,24 +137,43 @@ export default function GeneratePage() {
   }, []);
   useEffect(() => stopPolling, [stopPolling]);
 
+  /**
+   * Durum polling'i — üstel backoff'lu.
+   * Sunucu yanıt vermediğinde (504/524) eski hal sabit 2 sn'de bir yeniden deniyordu; sunucu
+   * zaten zorlanırken üstüne istek yığıyor ve kullanıcıya hiçbir şey söylemiyordu. Artık aralık
+   * 2 → 30 sn'ye kadar açılır ve birkaç başarısızlıktan sonra durum ekranda görünür.
+   */
+  const POLL_OK_MS = 2000;
+  const POLL_MAX_MS = 30_000;
+  const WARN_AFTER_FAILURES = 3;
+
   const poll = useCallback(
     (id: string) => {
       stopPolling();
+      let failures = 0;
       const tick = async () => {
         try {
           const res = await fetch(`/api/pipeline/status/${id}`);
-          if (res.ok) {
-            const data: PipelineRun = await res.json();
-            setRun(data);
-            if (data.status === 'error') setError(data.errorMessage ?? 'Hata oluştu.');
-            if (WORKING.includes(data.status)) {
-              pollTimer.current = setTimeout(tick, 2000);
-            }
-          } else {
-            pollTimer.current = setTimeout(tick, 2000);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: PipelineRun = await res.json();
+          failures = 0;
+          setPollWarning(null);
+          setRun(data);
+          if (data.status === 'error') setError(data.errorMessage ?? 'Hata oluştu.');
+          if (WORKING.includes(data.status)) {
+            pollTimer.current = setTimeout(tick, POLL_OK_MS);
           }
         } catch {
-          pollTimer.current = setTimeout(tick, 2000);
+          failures++;
+          // 2s, 4s, 8s, 16s, 30s (tavan) — sunucuyu daha da boğmadan yeniden dene.
+          const delay = Math.min(POLL_OK_MS * 2 ** (failures - 1), POLL_MAX_MS);
+          if (failures >= WARN_AFTER_FAILURES) {
+            setPollWarning(
+              `Sunucu ${failures} denemedir durum bilgisi döndürmüyor. İşlem arka planda sürüyor olabilir; ` +
+                `${Math.round(delay / 1000)} sn sonra tekrar denenecek. Sayfayı kapatsanız bile iş devam eder.`,
+            );
+          }
+          pollTimer.current = setTimeout(tick, delay);
         }
       };
       pollTimer.current = setTimeout(tick, 1500);
@@ -299,6 +319,7 @@ export default function GeneratePage() {
     setRun(null);
     setBusy(false);
     setError(null);
+    setPollWarning(null);
     setPrompt('');
     setReferenceFile(null);
     setReferencePreview(null);
@@ -314,6 +335,7 @@ export default function GeneratePage() {
     setRun(null);
     setBusy(false);
     setError(null);
+    setPollWarning(null);
     setSavedVariations(new Set());
   }
 
@@ -482,6 +504,12 @@ export default function GeneratePage() {
       {error ? (
         <Card className="mb-6 border-red-200 bg-red-50">
           <p className="text-sm text-red-700">{error}</p>
+        </Card>
+      ) : null}
+
+      {pollWarning ? (
+        <Card className="mb-6 border-amber-200 bg-amber-50">
+          <p className="text-sm text-amber-800">{pollWarning}</p>
         </Card>
       ) : null}
 

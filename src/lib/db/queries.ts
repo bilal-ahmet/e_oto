@@ -6,7 +6,7 @@
  */
 
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
-import { db } from './index';
+import { db, pgPool } from './index';
 import {
   competitorListings,
   competitorResearch,
@@ -249,17 +249,40 @@ export async function incrementRunAttempts(id: string): Promise<number> {
 }
 
 /**
- * PostgreSQL session-level advisory lock (best-effort). Sweeper'ı tek instance'ta çalıştırmak için;
- * kilit alınamazsa (başka instance tutuyorsa) false döner. İş bitince releaseAdvisoryLock çağrılır.
+ * PostgreSQL session-level advisory lock ile bir işi tek instance'ta çalıştırır.
+ *
+ * ÖNEMLİ: Advisory lock, onu ALAN bağlantıya (session) aittir. Eski hali `db.execute()`
+ * kullanıyordu; havuz her sorguda farklı bir client verebildiği için `pg_advisory_unlock`
+ * çoğu zaman BAŞKA bir session'da çalışıyor, `false` dönüp kilidi asıl sahibinde bırakıyordu
+ * (kilit ancak o bağlantı idle timeout'la kapanınca serbest kalıyordu). Bu yüzden kilit alma,
+ * iş ve bırakma aynı client üzerinde yapılır.
+ *
+ * @returns Kilit alınamazsa (başka instance tutuyorsa) `false`; iş çalıştıysa `true`.
  */
-export async function tryAdvisoryLock(key: number): Promise<boolean> {
-  const res = await db.execute(sql`select pg_try_advisory_lock(${key}) as locked`);
-  const rows = (res as unknown as { rows: Array<{ locked: boolean }> }).rows;
-  return rows?.[0]?.locked === true;
-}
-
-export async function releaseAdvisoryLock(key: number): Promise<void> {
-  await db.execute(sql`select pg_advisory_unlock(${key})`);
+export async function withAdvisoryLock(key: number, fn: () => Promise<void>): Promise<boolean> {
+  const client = await pgPool().connect();
+  let locked = false;
+  try {
+    const res = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [key]);
+    locked = res.rows[0]?.locked === true;
+    if (!locked) return false;
+    await fn();
+    return true;
+  } finally {
+    if (locked) {
+      // Kilidi ALAN client üzerinde bırak — release edilemezse bağlantıyı havuzdan düşür ki
+      // kilit sızmasın (bağlantı kapanınca PG session lock'ları otomatik serbest bırakır).
+      try {
+        await client.query('select pg_advisory_unlock($1)', [key]);
+        client.release();
+      } catch (e) {
+        console.error('[db] advisory unlock başarısız — bağlantı düşürülüyor:', e instanceof Error ? e.message : e);
+        client.release(true);
+      }
+    } else {
+      client.release();
+    }
+  }
 }
 
 // ── competitor_shops ──────────────────────────────────────────────────────────

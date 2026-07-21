@@ -27,17 +27,31 @@ const FPS = 30;
 const OUT_W = 1080;
 const OUT_H = 1350; // 4:5
 
+/** ffmpeg asılırsa süreci öldür — pipeline adımı sonsuza kadar beklemesin. */
+const FFMPEG_TIMEOUT_MS = 5 * 60_000;
+
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const ffmpegPath = resolveFfmpeg();
     if (!existsSync(ffmpegPath)) return reject(new Error(`ffmpeg binary bulunamadı: ${ffmpegPath}`));
     const proc = spawn(ffmpegPath, args, { windowsHide: true });
     let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGKILL');
+    }, FFMPEG_TIMEOUT_MS);
     proc.stderr.on('data', (d) => (stderr += d.toString()));
-    proc.on('error', reject);
-    proc.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`ffmpeg çıkış kodu ${code}: ${stderr.slice(-500)}`)),
-    );
+    proc.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) return reject(new Error(`ffmpeg ${FFMPEG_TIMEOUT_MS / 1000} sn içinde bitmedi — iptal edildi.`));
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg çıkış kodu ${code}: ${stderr.slice(-500)}`));
+    });
   });
 }
 
@@ -63,11 +77,15 @@ export async function makeZoomVideo(image: Buffer): Promise<Buffer> {
       `format=yuv420p`;
     await runFfmpeg([
       '-y',
+      '-loglevel', 'error',
+      '-threads', '1', // 1 vCPU instance: fazla thread yalnızca context-switch maliyeti üretir
       '-loop', '1',
       '-i', inPath,
       '-t', String(DURATION),
       '-vf', vf,
       '-c:v', 'libx264',
+      '-preset', 'veryfast', // 8 sn'lik 1080x1350 klip için 'medium' gereksiz; ~3-4× daha hızlı
+      '-crf', '23',
       '-pix_fmt', 'yuv420p',
       '-movflags', '+faststart',
       outPath,

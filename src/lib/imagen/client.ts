@@ -6,6 +6,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { getEnv } from '@/lib/env';
+import { TIMEOUTS, withTimeout } from '@/lib/async/timeout';
 
 const MODEL = 'imagen-4.0-generate-001';
 
@@ -32,15 +33,19 @@ export async function generateImagesImagen(
   count = 1,
   aspectRatio: '1:1' | '3:4' | '4:3' | '9:16' | '16:9' = '3:4',
 ): Promise<{ buffer: Buffer; contentType: string }[]> {
-  const response = await client().models.generateImages({
-    model: MODEL,
-    prompt,
-    config: {
-      numberOfImages: Math.max(1, Math.min(count, 4)),
-      aspectRatio,
-      outputMimeType: 'image/png',
-    },
-  });
+  const response = await withTimeout(
+    client().models.generateImages({
+      model: MODEL,
+      prompt,
+      config: {
+        numberOfImages: Math.max(1, Math.min(count, 4)),
+        aspectRatio,
+        outputMimeType: 'image/png',
+      },
+    }),
+    TIMEOUTS.imageGen,
+    'Imagen varyasyon üretimi',
+  );
 
   const images = (response.generatedImages ?? [])
     .map((g) => g.image)

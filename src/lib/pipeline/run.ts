@@ -11,7 +11,7 @@
  * SEO + 5 JPG + video + ölçü görseli + Etsy taslak yine üretilir.
  */
 
-import sharp from 'sharp';
+import { sharp } from '@/lib/image/sharp';
 import { getCompetitorResearch, getPipelineRun, updatePipelineRun } from '@/lib/db/queries';
 import { keyFromUrl, putObject, readObject } from '@/lib/storage';
 import { generateImages } from '@/lib/image-gen';
@@ -43,6 +43,49 @@ export interface ReferenceImageInput {
   mediaType: ImageMediaType;
 }
 
+// ── Süreç-içi çalışma kirası (lease) ─────────────────────────────────────────
+/**
+ * Bu süreçte ŞU AN üzerinde çalışılan run id'leri.
+ *
+ * NEDEN: Kurtarma sweeper'ı (lib/pipeline/recovery.ts) "askıda" kararını yalnızca `updated_at`e
+ * bakarak veriyordu. Uzun adımlarda (upscale + paketleme) DB'ye yazım olmadığından, iş HÂLÂ
+ * çalışırken 15 dk dolunca sweeper aynı run için İKİNCİ bir kopya başlatıyor; bellek ve CPU
+ * ikiye katlanıp 1 GB'lık instance'ı OOM'a sürüklüyordu. Sweeper artık aktif run'ları atlar.
+ *
+ * `heartbeat` ayrıca uzun adım boyunca `updated_at`i tazeler; böylece başka bir instance da
+ * (ileride instance_count>1) bu run'ı askıda sanmaz.
+ */
+const activeRuns = new Map<string, string>(); // runId → çalışan adımın adı (log için)
+
+export function isRunActive(runId: string): boolean {
+  return activeRuns.has(runId);
+}
+
+const HEARTBEAT_MS = 60_000;
+
+/**
+ * Adımı kira + heartbeat altında çalıştırır. Aynı run için ikinci bir çalışma isteği gelirse
+ * (sweeper yarışı) sessizce yok sayılır — çift işleme yapılmaz.
+ */
+async function withRunLease(runId: string, step: string, fn: () => Promise<void>): Promise<void> {
+  const running = activeRuns.get(runId);
+  if (running) {
+    console.warn(`[pipeline] run ${runId} halen ${running} adımında — yinelenen ${step} çağrısı atlandı.`);
+    return;
+  }
+  activeRuns.set(runId, step);
+  const beat = setInterval(() => {
+    // Yalnızca updated_at'i tazeler (status'a dokunmaz) — sweeper'ın 15 dk penceresini sıfırlar.
+    void updatePipelineRun(runId, {}).catch(() => {});
+  }, HEARTBEAT_MS);
+  try {
+    await fn();
+  } finally {
+    clearInterval(beat);
+    activeRuns.delete(runId);
+  }
+}
+
 /**
  * Kapı 1 — Seçilen modelle `count` varyasyon üretir; run'ı awaiting_approval'a getirir.
  * `prompt` zaten nihai metindir (referans modunda Instruction Üretici'nin ürettiği transformation
@@ -54,29 +97,33 @@ export async function generateVariations(
   prompt: string,
   count: number,
 ): Promise<void> {
-  try {
-    // Idempotent: varyasyonlar zaten üretilmişse tekrar üretme (resume).
-    const existing = await getPipelineRun(runId);
-    if (existing?.variationUrls?.length) {
-      await updatePipelineRun(runId, { status: 'awaiting_approval', attempts: 0, errorMessage: null });
-      return;
+  // Hata YENİDEN FIRLATILMAZ: çağıran `void generateVariations(...)` diyor; rethrow her üretim
+  // hatasında unhandled rejection üretip aynı hatayı ikinci kez loglatıyordu. Hata zaten
+  // `fail()` ile run'a yazılıyor ve UI status polling'inde görünüyor.
+  return withRunLease(runId, 'generateVariations', async () => {
+    try {
+      // Idempotent: varyasyonlar zaten üretilmişse tekrar üretme (resume).
+      const existing = await getPipelineRun(runId);
+      if (existing?.variationUrls?.length) {
+        await updatePipelineRun(runId, { status: 'awaiting_approval', attempts: 0, errorMessage: null });
+        return;
+      }
+
+      await updatePipelineRun(runId, { status: 'generating_image', errorMessage: null });
+
+      const images = await generateImages(model, prompt, count);
+      const variationUrls: string[] = [];
+      for (let i = 0; i < images.length; i++) {
+        variationUrls.push(
+          await putObject(`runs/${runId}/variation-${i}.png`, images[i].buffer, images[i].contentType),
+        );
+      }
+
+      await updatePipelineRun(runId, { variationUrls, status: 'awaiting_approval', attempts: 0 });
+    } catch (err) {
+      await fail(runId, err);
     }
-
-    await updatePipelineRun(runId, { status: 'generating_image', errorMessage: null });
-
-    const images = await generateImages(model, prompt, count);
-    const variationUrls: string[] = [];
-    for (let i = 0; i < images.length; i++) {
-      variationUrls.push(
-        await putObject(`runs/${runId}/variation-${i}.png`, images[i].buffer, images[i].contentType),
-      );
-    }
-
-    await updatePipelineRun(runId, { variationUrls, status: 'awaiting_approval', attempts: 0 });
-  } catch (err) {
-    await fail(runId, err);
-    throw err;
-  }
+  });
 }
 
 type ImageMediaTypeIn = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
@@ -95,6 +142,10 @@ function mediaTypeFromUrl(url: string): ImageMediaTypeIn {
  * Hem `selectVariation` hem de taslaktan başlatma (`from-draft`) bunu kullanır.
  */
 export async function selectImageForRun(runId: string, url: string): Promise<void> {
+  return withRunLease(runId, 'selectImageForRun', () => selectImageForRunInner(runId, url));
+}
+
+async function selectImageForRunInner(runId: string, url: string): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -165,6 +216,10 @@ function orientationFor(width: number, height: number): string {
  * Kapı 2 onayı — (düzenlenmiş) SEO'yu kaydeder; upscale + 5 JPG + 8 mockup + video + ölçü görseli üretir.
  */
 export async function approveSeoAndProcess(runId: string, seo: SeoData): Promise<void> {
+  return withRunLease(runId, 'approveSeoAndProcess', () => approveSeoAndProcessInner(runId, seo));
+}
+
+async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -192,13 +247,14 @@ export async function approveSeoAndProcess(runId: string, seo: SeoData): Promise
     }
 
     // 2) Dijital dosyalar: 5 JPG (300 DPI, <20MB) — zaten üretilmişse atla.
+    // Her dosya üretilir üretilmez depoya yazılır: aynı anda bellekte tek bir 77MP çıktı bulunur
+    // (5'ini biriktiren eski hal instance limitini aşıp OOM'a yol açıyordu — bkz. packaging başlığı).
     let digitalFileUrls = run.digitalFileUrls as Record<string, string> | undefined;
     if (!digitalFileUrls || Object.keys(digitalFileUrls).length === 0) {
-      const files = await packageJpegs(master);
       const map: Record<string, string> = {};
-      for (const f of files) {
+      await packageJpegs(master, async (f) => {
         map[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
-      }
+      });
       digitalFileUrls = map;
     }
     await updatePipelineRun(runId, { upscaledImageUrl: masterUrl, digitalFileUrls });
@@ -266,7 +322,13 @@ export async function approveSeoAndProcess(runId: string, seo: SeoData): Promise
   }
 }
 
-/** Gate 3 — tek bir mockup sahnesini yeniden üretir (master'dan). */
+/**
+ * Gate 3 — tek bir mockup sahnesini yeniden üretir (master'dan).
+ *
+ * Kira (withRunLease) BİLEREK yok: run bu adım boyunca `awaiting_publish`te kalır, yani kurtarma
+ * sweeper'ı onu hiç sürdürmez — kiraya ihtiyaç yok. Dahası kullanıcı farklı sahneleri arka arkaya
+ * yeniden üretebilmeli; kira ikinci isteği sessizce düşürüp UI'yi sonsuz spinner'da bırakırdı.
+ */
 export async function regenerateMockup(runId: string, index: number): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
@@ -303,6 +365,10 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
  * @param thumbnailIndex Seçilen mockup index'i; ilk yüklenir (Etsy birincil/thumbnail = ilk görsel).
  */
 export async function publishToEtsy(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
+  return withRunLease(runId, 'publishToEtsy', () => publishToEtsyInner(runId, price, thumbnailIndex));
+}
+
+async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -398,6 +464,10 @@ export async function publishToEtsy(runId: string, price?: number, thumbnailInde
  * Etsy adımının aksine tek atomik `POST /pins` çağrısıdır — checkpoint yok, resume tüm işlemi tekrarlar.
  */
 export async function publishToPinterest(runId: string): Promise<void> {
+  return withRunLease(runId, 'publishToPinterest', () => publishToPinterestInner(runId));
+}
+
+async function publishToPinterestInner(runId: string): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);

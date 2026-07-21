@@ -331,7 +331,20 @@ Sonuçlar tahminidir, kesin satış rakamı değildir — bir sıralama/öncelik
 - **Migration runner** (`scripts/migrate.ts`, `npm run db:migrate`, tsx): App Platform **PRE_DEPLOY job** çalıştırır. Migration `0008_add_resilience_columns` = `attempts` + `publish_progress`.
 - **Pipeline dayanıklılığı**: adımlar idempotent/resume; `publishToEtsy` `publish_progress` checkpoint'i ile çift-listing/çift-upload olmadan sürdürülür. `lib/pipeline/recovery.ts` + `cron/recovery.ts` (her 2 dk + startup) askıda kalan run'ları PG advisory lock ile sürdürür. `instrumentation.ts` boot'ta env fail-fast (`assertProdEnv`: prod'da Spaces zorunlu).
 - **Docker**: kök `Dockerfile` (multi-stage, node:22, tam node_modules → sharp/ffmpeg-static garanti), `.dockerignore`, `/api/health`. `.do/app.yaml` app spec template (web service + migrate job + domain).
-- **Deploy**: `instance_count:1` (cron + fire-and-forget). OAuth redirect + `PUBLIC_BASE_URL` custom domaine ayarlanır; Etsy panelinde redirect güncellenir.
+- **Deploy**: `instance_count:1` (cron + fire-and-forget), `instance_size_slug: basic-s` (2 GB — 1 GB YETMEZ, aşağıya bak). OAuth redirect + `PUBLIC_BASE_URL` custom domaine ayarlanır; Etsy panelinde redirect güncellenir.
+
+### Kaynak sınırları — `processing_files` adımı (bozulmaması gereken kurallar)
+
+Canlıda `/api/pipeline/status` 504/524 veren ve run'ı bitmeyen döngüye sokan sorun buradaydı; kök nedenler ölçülerek giderildi. Bu adımı değiştirirken:
+
+1. **Görsel işleri SIRAYLA çalışır.** `packageJpegs` 5 oranı `Promise.all` ile paralel işliyordu: 5 × ~77 megapiksel pipeline → tepe RSS **1823 MB** (instance 1 GB) → OOM. Seri hâlde **204 MB**. Paralelleştirmeyin.
+2. **mozjpeg kullanılmaz.** Tüm görüntünün katsayı tablosunu bellekte tutar. 7200×10800 ölçümü: mozjpeg 6.0 MB / 12.5 s / 611 MB ↔ baseline libjpeg 7.1 MB / 5.1 s / 173 MB. 20 MB tavanının çok altındayız; `{ mozjpeg:false, progressive:false, optimiseCoding:false }` kalmalı.
+3. **sharp her zaman `@/lib/image/sharp`'tan import edilir** (`import sharp from 'sharp'` DEĞİL). Orada `concurrency` (`SHARP_CONCURRENCY`, varsayılan 1) ve `cache(false)` uygulanır; libvips varsayılanı konteynerde HOST çekirdek sayısını görür.
+4. **`UV_THREADPOOL_SIZE=8`** Dockerfile'da sabittir. sharp libuv havuzunu tutar ve `dns.lookup` de aynı havuzdadır: havuz doluyken DNS ölçümde 4 ms yerine **28.6 s** sürdü → yeni her DB/Spaces/fal/Etsy bağlantısı ve dolayısıyla status endpoint'i kilitlendi.
+5. **Üretilen dosyalar biriktirilmez** — `packageJpegs(master, onFile)` her JPG'yi üretir üretmez depoya yazdırır.
+6. **Her dış çağrının timeout'u vardır** (`lib/async/timeout.ts` → `TIMEOUTS`). fal `subscribe` timeout'suzken asılı kalıp adımı sonsuza kadar bekletiyordu.
+7. **Uzun adımlar `withRunLease` altında çalışır** (`lib/pipeline/run.ts`). Kurtarma sweeper'ı "askıda"yı yalnızca `updated_at`e bakarak belirlediğinden, hâlâ çalışan bir run'ın İKİNCİ kopyasını başlatıp belleği ikiye katlıyordu. Kira + 60 sn heartbeat bunu engeller; `recovery.ts` `isRunActive`'i kontrol eder. `regenerateMockup` bilerek kirasızdır (run `awaiting_publish`te kalır, sweeper dokunmaz).
+8. **Advisory lock `withAdvisoryLock` ile alınır** — kilit onu alan bağlantıya aittir; havuzdan farklı bir client'la `unlock` çağırmak sessizce başarısız olup kilidi sızdırır.
 
 ## 12. Referans Doküman
 

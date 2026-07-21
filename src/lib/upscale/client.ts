@@ -7,7 +7,8 @@
  * pipeline (5 JPG/video) fal kredisi gelmeden de ilerleyebilsin.
  */
 
-import { hasFal, getFal, uploadBuffer, downloadImage } from '@/lib/fal';
+import { hasFal, falSubscribe, uploadBuffer, downloadImage } from '@/lib/fal';
+import { TIMEOUTS } from '@/lib/async/timeout';
 
 const MODEL = 'fal-ai/clarity-upscaler';
 
@@ -18,14 +19,16 @@ export async function upscale(buffer: Buffer): Promise<Buffer> {
   }
   try {
     const imageUrl = await uploadBuffer(buffer, 'image/png', 'master-source.png');
-    const result = await getFal().subscribe(MODEL, {
-      input: {
+    const out = await falSubscribe<{ image?: { url?: string }; images?: { url: string }[] }>(
+      MODEL,
+      {
         image_url: imageUrl,
         upscale_factor: 4,
         creativity: 0.3, // sanat görselini koru
       },
-    });
-    const out = (result.data as { image?: { url?: string }; images?: { url: string }[] });
+      TIMEOUTS.upscale,
+      'clarity-upscaler',
+    );
     const url = out.image?.url ?? out.images?.[0]?.url;
     if (!url) throw new Error('clarity-upscaler görsel döndürmedi.');
     const { buffer: upscaled } = await downloadImage(url);

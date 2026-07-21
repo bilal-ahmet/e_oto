@@ -78,6 +78,10 @@ async function readLocal(key: string): Promise<Buffer> {
 }
 
 // ── S3 (Spaces) sürücüsü ──────────────────────────────────────────────────────
+// Spaces yanıt vermezse pipeline adımı sonsuza kadar beklemesin — AWS SDK abortSignal ile
+// isteği GERÇEKTEN iptal eder (soket kapanır, sızıntı olmaz).
+const SPACES_TIMEOUT_MS = 3 * 60_000;
+
 async function putSpaces(cfg: SpacesConfig, key: string, body: Buffer, contentType: string): Promise<string> {
   await cfg.client.send(
     new PutObjectCommand({
@@ -87,12 +91,15 @@ async function putSpaces(cfg: SpacesConfig, key: string, body: Buffer, contentTy
       ContentType: contentType,
       ACL: 'public-read', // panel <img> ve genel erişim için nesneler herkese açık okunur.
     }),
+    { abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS) },
   );
   return `${cfg.publicBase}/${key}`;
 }
 
 async function readSpaces(cfg: SpacesConfig, key: string): Promise<Buffer> {
-  const res = await cfg.client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
+  const res = await cfg.client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), {
+    abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS),
+  });
   const bytes = await res.Body!.transformToByteArray();
   return Buffer.from(bytes);
 }

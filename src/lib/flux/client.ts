@@ -5,7 +5,8 @@
  * Yalnızca server-side import edilir.
  */
 
-import { getFal } from '@/lib/fal';
+import { downloadImage, falSubscribe } from '@/lib/fal';
+import { TIMEOUTS } from '@/lib/async/timeout';
 
 const MODEL = 'fal-ai/flux-pro/kontext/text-to-image';
 
@@ -26,26 +27,27 @@ export async function generateImagesFlux(
   count = 1,
   aspectRatio: FluxAspectRatio = '3:4',
 ): Promise<{ buffer: Buffer; contentType: string }[]> {
-  const result = await getFal().subscribe(MODEL, {
-    input: {
+  const data = await falSubscribe<{ images?: FluxImage[] }>(
+    MODEL,
+    {
       prompt,
       num_images: Math.max(1, Math.min(count, 4)),
       aspect_ratio: aspectRatio,
       output_format: 'png',
     },
-  });
+    TIMEOUTS.imageGen,
+    'FLUX varyasyon üretimi',
+  );
 
-  const images = (result.data?.images ?? []) as FluxImage[];
+  const images = data.images ?? [];
   if (images.length === 0) {
     throw new Error('FLUX görsel döndürmedi (içerik politikası veya boş yanıt olabilir).');
   }
 
   return Promise.all(
     images.map(async (img) => {
-      const res = await fetch(img.url);
-      if (!res.ok) throw new Error(`FLUX görseli indirilemedi (${res.status}): ${img.url}`);
-      const buffer = Buffer.from(await res.arrayBuffer());
-      return { buffer, contentType: img.content_type ?? 'image/png' };
+      const { buffer, contentType } = await downloadImage(img.url);
+      return { buffer, contentType: img.content_type ?? contentType };
     }),
   );
 }
