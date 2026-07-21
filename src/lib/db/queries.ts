@@ -8,6 +8,7 @@
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db, pgPool } from './index';
 import {
+  appSettings,
   competitorListings,
   competitorResearch,
   competitorShops,
@@ -135,6 +136,35 @@ export async function upsertOAuthToken(
     });
 }
 
+/**
+ * Token'ın VARLIĞINI ve son kullanma tarihini döner — şifre çözmez.
+ * Bağlantı durumu göstergeleri (panel kartı, auth status uçları) bunu kullanır: gizli değeri
+ * belleğe almadan "bağlı mı?" sorusuna cevap verir.
+ */
+export async function getOAuthTokenMeta(provider: 'etsy' | 'pinterest'): Promise<{
+  connected: boolean;
+  expiresAt: Date | null;
+  hasRefreshToken: boolean;
+  updatedAt: Date | null;
+}> {
+  const [row] = await db
+    .select({
+      expiresAt: oauthTokens.expiresAt,
+      refresh: oauthTokens.refreshTokenEncrypted,
+      updatedAt: oauthTokens.updatedAt,
+    })
+    .from(oauthTokens)
+    .where(eq(oauthTokens.provider, provider))
+    .limit(1);
+  if (!row) return { connected: false, expiresAt: null, hasRefreshToken: false, updatedAt: null };
+  return {
+    connected: true,
+    expiresAt: row.expiresAt ?? null,
+    hasRefreshToken: Boolean(row.refresh),
+    updatedAt: row.updatedAt ?? null,
+  };
+}
+
 export async function getOAuthToken(provider: 'etsy' | 'pinterest'): Promise<{
   accessToken: string;
   refreshToken: string | null;
@@ -151,6 +181,33 @@ export async function getOAuthToken(provider: 'etsy' | 'pinterest'): Promise<{
     refreshToken: row.refreshTokenEncrypted ? decrypt(row.refreshTokenEncrypted) : null,
     expiresAt: row.expiresAt ?? null,
   };
+}
+
+// ── app_settings ──────────────────────────────────────────────────────────────
+
+/**
+ * Panelden değiştirilebilen ayarlar. Env değişkenlerinin aksine redeploy gerektirmez —
+ * Pinterest board seçimi gibi, kullanıcının çalışma anında değiştirdiği değerler içindir.
+ */
+export type AppSettingKey = 'pinterest_board_id' | 'pinterest_token_env';
+
+export async function getSetting(key: AppSettingKey): Promise<string | null> {
+  const [row] = await db
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, key))
+    .limit(1);
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: AppSettingKey, value: string): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value, updatedAt: new Date() },
+    });
 }
 
 // ── pipeline_runs ─────────────────────────────────────────────────────────────
@@ -178,6 +235,7 @@ export async function createPipelineRun(
 type PipelineRunUpdate = {
   status?: PipelineStatus;
   competitorResearchId?: number;
+  imageModel?: ImageModel; // referans modunda Imagen → FLUX düşüşü buraya yazılır
   referenceImageUrl?: string;
   variationUrls?: string[];
   generatedImageUrl?: string;

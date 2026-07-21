@@ -14,7 +14,7 @@ Etsy'de dijital görsel (duvar sanatı/baskı vb.) satan bir mağaza için uçta
 6. Onay sonrası: görsel **clarity-upscaler ×4** ile büyütülür; sonra (a) **5 JPG** dijital dosya (oran başına en büyük boyut, 300 DPI, <20MB), (b) **8 mockup** (FLUX.1 Kontext i2i), (c) **1 zoom video** (ffmpeg), (d) **1 sabit ölçü görseli** üretilir/eklenir
 7. **Onay kapısı #3:** Kullanıcı medyayı (8 mockup + video + ölçü) ve 5 JPG'yi görür; beğenmediği mockup'ı tek tek yeniden üretir; fiyatı girip "Etsy'ye yayınla" der
 8. Listing Etsy'de yayınlanır: 9 görsel (8 mockup + ölçü) + 1 video + 5 JPG yüklenir, öznitelikler yazılır, listing `active` yapılır (ham görsel display olarak YÜKLENMEZ)
-9. (Kapsam dışı/opsiyonel) Aynı görsel Pinterest'te, Etsy listing linkiyle pinlenir
+9. (Opsiyonel, Etsy yayınından sonra elle tetiklenir) Aynı görsel Pinterest'te, Etsy listing linkiyle pinlenir — pin metni Claude tarafından üretilip kullanıcı onayından geçer
 10. Ayrı bir modül: rakip mağazaları tarayıp tahmini satış/fırsat skoru üretir
 
 **Her adım kullanıcı onayını bekler** — sistem hiçbir adımı kullanıcı görmeden otomatik geçmez.
@@ -36,7 +36,7 @@ Etsy'de dijital görsel (duvar sanatı/baskı vb.) satan bir mağaza için uçta
 | Görsel işleme (kırpma/oran/DPI) | `sharp` |
 | Dijital dosyalar | **5 JPG** (oran başına en büyük boyut, 300 DPI, <20MB; ZIP yok) |
 | Etsy | Etsy Open API v3 — OAuth2 + PKCE |
-| Pinterest | Pinterest API v5 — OAuth2 (Standard access aktif, pinler public) |
+| Pinterest | Pinterest API v5 — OAuth2 (**şu an Trial access → sandbox**; hedef Standard) |
 | Zamanlanmış görevler | `node-cron` (uygulama içinde) |
 | Barındırma | DigitalOcean App Platform (Web Service) |
 | Token şifreleme | AES-256-GCM (Node `crypto`) |
@@ -52,12 +52,18 @@ app/
   api/
     auth/etsy/start/route.ts
     auth/etsy/callback/route.ts
+    auth/etsy/status/route.ts       → bağlantı durumu (token var mı, ne zaman doluyor); ?probe=1 gerçek Etsy çağrısı yapar
+    pipeline/resume/route.ts        → hata almış run'ı elindeki çıktılara göre en ileri onay kapısına döndürür
     competitor-research/analyze/route.ts → rakip listing URL'inden özgün SEO üret (ön-adım, senkron)
     pipeline/generate/route.ts      → model+varyasyon ile üretim başlat (arka plan; opsiyonel competitorResearchId)
     pipeline/select-image/route.ts  → kapı #1: varyasyon seç → SEO üret (rakip varsa o nişe yönlendirilir)
     pipeline/approve-seo/route.ts   → kapı #2: SEO onayla → upscale + 5 JPG + 8 mockup + video + ölçü
     pipeline/regenerate-mockup/route.ts → gate 3: tek mockup yeniden üret
     pipeline/publish/route.ts       → kapı #3: Etsy'ye yayınla (medya + öznitelik dahil)
+    pipeline/pin-copy/route.ts      → pin metnini üret ve DÖN (DB'ye yazmaz, pinlemez)
+    pipeline/publish-pinterest/route.ts → onaylanmış metinle pin at (Etsy yayınından sonra, elle)
+    auth/pinterest/status/route.ts  → Pinterest bağlantı durumu (+ortam uyuşmazlığı); ?probe=1 gerçek çağrı
+    auth/pinterest/boards/route.ts  → GET board listesi / POST board seçimini kaydet
     pipeline/reject/route.ts        → run'ı iptal et
     pipeline/status/[id]/route.ts   → durum sorgulama (polling)
     pipeline/runs/route.ts          → run listesi
@@ -67,21 +73,25 @@ lib/
   etsy/      (client.ts, oauth.ts, listings.ts) → taksonomi(Digital Prints)+properties+video+attributes; etsyPublicFetch + getListingById (public, OAuth'suz rakip analizi)
   fal/       (index.ts)            → paylaşılan fal client + storage upload (image_url için)
   imagen/    (client.ts)            → generateImagesImagen (çoklu varyasyon)
-  flux/      (client.ts)            → generateImagesFlux (fal.ai FLUX.1 Kontext pro, text-to-image)
+  flux/      (client.ts)            → generateImagesFlux (fal.ai FLUX.1 Kontext pro); referans yoksa
+                                      text-to-image, referans varsa image-to-image (`image_url`)
   image-gen/ (index.ts)            → model dispatcher ('imagen' | 'flux')
-  claude/    (client.ts, vision.ts, seo.ts, competitor-seo.ts) → seo.ts: generateSeo(competitorRef ile augment); competitor-seo.ts: analyzeCompetitorSeo (rakip metninden özgün SEO)
+  claude/    (client.ts, vision.ts, seo.ts, competitor-seo.ts, pin-copy.ts) → seo.ts: generateSeo(competitorRef ile augment); competitor-seo.ts: analyzeCompetitorSeo (rakip metninden özgün SEO); pin-copy.ts: generatePinCopy + fallbackPinCopy (Pinterest başlık/açıklama/alt metin)
+  pinterest/ (hosts.ts, oauth.ts, client.ts, boards.ts, pins.ts) → hosts.ts: sandbox/production tek kaynak; boards.ts: listBoards; pins.ts: createPin (board app_settings'ten)
   upscale/   (client.ts)            → fal clarity-upscaler ×4 (fallback pass-through)
   mockup/    (scenes.ts, client.ts) → 8 sahne flux-kontext image-to-image
   video/     (zoom.ts)             → ffmpeg-static zoom mp4
   listing/   (description.ts, size-guide.ts) → açıklama şablonu + sabit ölçü görseli
   packaging/ (resize-and-export.ts) → packageJpegs: 5 JPG (sharp, 300 DPI, <20MB)
-  pipeline/  (run.ts)              → adım adım orkestrasyon (generateVariations/selectVariation/approveSeoAndProcess/regenerateMockup/publishToEtsy)
+  pipeline/  (run.ts)              → adım adım orkestrasyon (generateVariations/selectVariation/approveSeoAndProcess/regenerateMockup/publishToEtsy/publishToPinterest)
   storage/   (index.ts)            → lokal disk sürücüsü (putObject/readObject/keyFromUrl)
   scoring/   (competitor-algorithm.ts)
   db/        (schema.ts, queries.ts, crypto.ts)
 public/templates/size-guide.png    → kullanıcının sağladığı sabit ölçü görseli (her listing'e eklenir)
 cron/
   competitor-scan.ts             → node-cron kaydı
+  recovery.ts                    → askıda kalan run'ları sürdürür (her 2 dk + startup)
+  token-refresh.ts               → Etsy + Pinterest token'larını günlük tazeler (90/60 günlük refresh pencereleri hiç dolmasın)
 types/
   index.ts                       → tüm domain tipleri (bkz. Bölüm 6)
 ```
@@ -97,6 +107,14 @@ CREATE TABLE oauth_tokens (
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Panelden değiştirilebilen, redeploy gerektirmeyen ayarlar (migration 0009).
+-- Kullanılan anahtarlar: pinterest_board_id, pinterest_token_env.
+CREATE TABLE app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
 CREATE TABLE pipeline_runs (
@@ -176,6 +194,8 @@ ETSY_REDIRECT_URI=
 PINTEREST_CLIENT_ID=
 PINTEREST_CLIENT_SECRET=
 PINTEREST_REDIRECT_URI=
+PINTEREST_API_ENV=        # sandbox | production (varsayılan production; trial'da sandbox ZORUNLU)
+PINTEREST_BOARD_ID=       # eski/override; board artık /admin kartından seçilir (app_settings)
 GOOGLE_API_KEY=            # Imagen / Gemini Developer API
 FAL_KEY=                  # fal.ai — FLUX.1 Kontext [pro] + clarity-upscaler + mockup
 ETSY_SHOP_NAME=           # açıklama TERMS/telif satırı (default VeloraArtDesigns)
@@ -280,13 +300,21 @@ queued → generating_image → awaiting_approval ──(kapı #1: görsel seç)
 ## 8. Etsy & Pinterest Entegrasyon Notları
 
 - **Etsy**: OAuth2 + PKCE. `/api/auth/etsy/start` → code_verifier üret + sakla → authorize URL'e yönlendir. `/api/auth/etsy/callback` → token al → `oauth_tokens`'a şifreli yaz. Gerekli scope'lar: `listings_r`, `listings_w`, `listings_d`, `shops_r`.
-- **Pinterest**: standart OAuth2. `/api/auth/pinterest/start` ve `/callback`. Hesap zaten Standard access'te (pinler public) — ek onay süreci yok.
+- **Pinterest**: standart OAuth2 (PKCE YOK; client kimlikleri Basic auth header'ında). `/api/auth/pinterest/start`, `/callback`, `/status`, `/boards`.
+  - **Erişim katmanı (KRİTİK):** Uygulama şu an **Trial access**'te. Trial'da pin **yalnızca `api-sandbox.pinterest.com`** üzerinde oluşturulabilir ve **pinler yalnızca sahibine görünür** (Sandbox varlıkları). Standard access'te pinler herkese açıktır. Host `PINTEREST_API_ENV` ile seçilir → `lib/pinterest/hosts.ts` (tek kaynak: `apiBase()`, `tokenUrl()`). Authorize URL (`www.pinterest.com/oauth/`) her iki ortamda AYNIDIR.
+  - **Sandbox ↔ production token'ları geçişsizdir.** Ortam değişince yeniden yetkilendirme + board yeniden seçimi şart. Token'ın ortamı `app_settings.pinterest_token_env`'e yazılır; `/admin` kartı uyuşmazlıkta uyarır.
+  - **Token ömrü**: access 30 gün, refresh 60 gün ama her kullanımda yenilenir (continuous refresh). `cron/token-refresh.ts` Etsy + Pinterest'i birlikte tazeler (7 günden eskiyse). Yenileme yanıtı `refresh_token` içermeyebilir — bu durumda eldeki token KORUNUR (null'a çekmek bağlantıyı sessizce öldürür).
+  - **Board seçimi**: `app_settings.pinterest_board_id` (panelden seçilir, redeploy gerekmez); `PINTEREST_BOARD_ID` env'i yalnızca fallback.
+  - **Pin metni**: `lib/claude/pin-copy.ts` Etsy SEO'sundan Pinterest'e uygun başlık (≤100) + açıklama (≤500) + alt metin üretir; kullanıcı `DoneView`'daki kapıda düzenleyip onaylar. Claude patlarsa `fallbackPinCopy` (Etsy başlığı + hook) kullanılır — pin kaybedilmez.
+  - **Standard access başvurusu**: developers.pinterest.com/apps → Upgrade. Şart: **tek kesintisiz demo videosu** — OAuth yetkilendirme ekranı → token alınması → o token'la gerçek API çağrısı (pin oluşturma) aynı kayıtta görünmeli. Token'ın hazır olduğu yerden başlayan video reddedilir. Ayrıca herkese açık gizlilik politikası URL'i gerekir (`/privacy` bunu karşılıyor).
 - Tüm Etsy çağrıları `getValidEtsyToken()` üzerinden geçer (gerekirse refresh eder).
+- **Token ömrü**: access token 1 saat, refresh token ~90 gün (her kullanımda yenilenir). Uygulama Etsy'yi yalnızca yayın anında çağırdığından `cron/token-refresh.ts` günlük olarak token'ı tazeler ve 90 günlük pencerenin dolmasını engeller. Bağlantı durumu `/admin` üstündeki `EtsyConnection` kartında ve `/api/auth/etsy/status` ucunda görünür.
+- **Video best-effort**: Etsy video yüklemesi başarısız olursa yayın devam eder; sebep `publish_progress.warnings`'e yazılır ve gate 3 / "Yayınlandı" ekranında gösterilir (sessizce yutulmaz).
 - **x-api-key formatı (2026-02-09'dan beri):** Etsy artık `x-api-key` header'ında `keystring:shared_secret` ister (sadece keystring değil). `lib/etsy/client.ts` bunu `ETSY_CLIENT_ID:ETSY_CLIENT_SECRET` olarak gönderir.
 - **Kategori**: Art & Collectibles > Prints > Digital Prints. taxonomy_id `getDigitalPrintsTaxonomyId()` ile `/seller-taxonomy/nodes`'tan bulunur (cache). `when_made` = en güncel aralık (`2020_2026`, Etsy reddederse `2020_2025`), `who_made:'i_did'`, `type:'download'`.
 - **Öznitelikler**: `getPropertiesByTaxonomyId(taxId)` ile izinli değerler alınır; Claude'un seçtiği Orientation/Style/Occasion/Room/Subject ada göre value_id'ye eşlenir, `PUT listings/{id}/properties/{property_id}` ile yazılır (eşleşmeyen atlanır).
 - Listing oluşturma sırası: `POST listings` (taslak) → öznitelikler → `POST listings/{id}/images` (**8 mockup + ölçü görseli**, ham görsel DEĞİL) → `POST listings/{id}/videos` (zoom mp4) → `POST listings/{id}/files` (**5 JPG**) → durumu `active` yap. Etsy: max 10 görsel + 1 video; dosya adı 3-70 karakter; image_url isteyen fal modelleri için master `fal.storage.upload` ile yüklenir (lokal URL çalışmaz).
-- Pinterest pin: `POST /v5/pins` — `link` alanına Etsy listing URL'i, görsel Spaces URL'i.
+- Pinterest pin: `POST /v5/pins` — `link` Etsy listing URL'i, `media_source` seçilen mockup'ın public Spaces URL'i (re-upload yok), `alt_text` Claude'dan. Etsy listing'i bilerek TASLAK bırakıldığından pin otomatik zincirlenmez: kullanıcı listing'i Etsy panelinden aktive ettikten sonra `DoneView`'dan tetikler (taslağa pin atmak ölü link üretir).
 
 ## 9. Rakip Analizi Algoritması (lib/scoring/competitor-algorithm.ts)
 
@@ -309,8 +337,9 @@ Sonuçlar tahminidir, kesin satış rakamı değildir — bir sıralama/öncelik
 - **Tanıtım medyası**: Listing'e 8 mockup (fal flux-kontext) + 1 zoom video (ffmpeg) + 1 sabit ölçü görseli (`public/templates/size-guide.png`, kullanıcı sağlar) yüklenir. Ham görsel display olarak YÜKLENMEZ.
 - **Öznitelikler**: Orientation (oran'dan kesin) + Style/Occasion/Room/Subject (Claude seçer, taksonomi değerine eşlenir).
 - **Görsel modeli**: UI'da `imagen` (Google) veya `flux` (fal.ai FLUX.1 Kontext [pro]) seçilir; `lib/image-gen` dispatcher ilgili API'ye yönlendirir. Varyasyon 1-4, varsayılan `flux`. Mockup + upscale hep fal'dır.
+- **Referans görsel = gerçek image-to-image**: Referans yüklendiğinde `generateVariations` görseli depodan okur, `fal.storage`'a yükler ve **`fal-ai/flux-pro/kontext`** i2i modeline `image_url` olarak verir — model görseli GERÇEKTEN girdi alır. Imagen 4 görsel girdisi kabul etmediğinden referans modunda otomatik FLUX'a düşülür ve run'a `imageModel:'flux'` yazılır (UI de uyarır). Varyasyonlar tek çağrıda değil, **her biri kendi rastgele seed'iyle ayrı çağrılarda** üretilir (tek seed'li batch neredeyse aynı çıktıyı verir); biri patlarsa diğerleri korunur. Referans varken `FAL_KEY` zorunludur — yoksa net hata verilir, sessizce metin moduna düşülmez.
 - **Dil**: Etsy SEO içerikleri (title, hook, description, tags) varsayılan olarak **İngilizce** üretilir (Etsy'nin ana pazarı İngilizce konuşan alıcılar). Bu varsayım değişirse burayı güncelle.
-- **Telif**: Referans görsel modunda, görsel doğrudan modele referans olarak verilmeden önce Claude ile tarif edilip prompt zenginleştirilir — birebir kopya üretilmez.
+- **Telif**: Referans görsel modelin girdisi olduğundan birebir kopya riskini **prompt** yönetir: "Talimat üret" (`lib/claude/vision.ts`) referansı Claude Vision'a okutup kompozisyonu koruyan ama şekil/renk/bakış açısını somut biçimde DEĞİŞTİREN bir düzenleme talimatı yazar; logo/imza/marka öğelerinin çıkarılmasını şart koşar.
 - **Token güvenliği**: `oauth_tokens` içindeki token'lar AES-256-GCM ile şifreli saklanır (Passora'daki yaklaşımla aynı). Anahtarlar asla repoya commit edilmez.
 - **Rate limit**: Etsy ~10 req/s, Pinterest yazma ~100 req/dk. `lib/etsy/client.ts` içinde throttle uygulanır.
 
@@ -323,7 +352,7 @@ Sonuçlar tahminidir, kesin satış rakamı değildir — bir sıralama/öncelik
 5. Etsy ve Pinterest developer app'lerini oluştur, redirect URI'leri yerel URL'e göre kaydet, OAuth akışlarını (`/api/auth/.../start` ve `/callback`) yerelde test et.
 6. Tüm parçalar tek tek doğrulandıktan sonra `pipeline/generate` + adım route'larında (`select-image`, `approve-seo`, `publish`) birleştir.
 
-**Mevcut durum (canlı doğrulandı):** Imagen + FLUX, Claude SEO, 5 JPG paketleme, ve Etsy OAuth + yayın çalışıyor. Pinterest kapsam dışı; upscale pass-through (fal kredisi yoksa).
+**Mevcut durum (canlı doğrulandı):** Imagen + FLUX, Claude SEO, 5 JPG paketleme, ve Etsy OAuth + yayın çalışıyor. Upscale pass-through (fal kredisi yoksa). Pinterest entegrasyonu kodda TAMAM (OAuth + board seçimi + Claude pin metni + pin atma); uygulama **Trial access**'te olduğundan `PINTEREST_API_ENV=sandbox` ile çalışır ve pinler yalnızca hesap sahibine görünür — **Standard access başvurusu (demo videosu) bekliyor**, onaylanınca production'a alınıp yeniden yetkilendirilecek.
 
 **Canlıya alma (DigitalOcean) altyapısı eklendi:**
 - **Depolama** (`lib/storage`): env-seçmeli sürücü — `DO_SPACES_*` doluysa **S3 (Spaces, public-read)**, değilse lokal disk (dev). İmzalar sabit. `keyFromUrl` hem Spaces hem legacy `/uploads/` URL'ini çözer.

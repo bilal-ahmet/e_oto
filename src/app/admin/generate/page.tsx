@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
-import type { ImageDraft, ImageModel, PipelineRun, PipelineStatus, SeoData } from '@/types';
+import type { ImageDraft, ImageModel, PinCopy, PipelineRun, PipelineStatus, SeoData } from '@/types';
 import { Button, Card, PageHeader, Spinner } from '@/components/ui';
 import { STATUS_META } from '@/lib/status';
 
@@ -125,6 +125,7 @@ export default function GeneratePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollWarning, setPollWarning] = useState<string | null>(null); // durum sorgusu yanıt vermiyor
+  const [etsyConnected, setEtsyConnected] = useState<boolean | null>(null); // null = henüz bilinmiyor
   const [regenIndex, setRegenIndex] = useState<number | null>(null); // yeniden üretilen mockup
   const [drafts, setDrafts] = useState<ImageDraft[]>([]); // kaydedilmiş görsel taslakları
   const [draftBusy, setDraftBusy] = useState(false); // taslak işlemi (devam/sil/yükle) sürüyor
@@ -203,6 +204,26 @@ export default function GeneratePage() {
         if (active) setDrafts(data.drafts ?? []);
       } catch {
         /* sessiz geç */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Etsy bağlantısını ÜRETİMDEN ÖNCE kontrol et — token yoksa kullanıcı bunu eskiden ancak
+  // hattın sonunda (mockup + video + 5 JPG üretildikten sonra) "Etsy bağlantısı yok" hatasıyla
+  // öğreniyordu. Uyarı ekranın üstünde durur; üretimi engellemez (taslak biriktirmek serbest).
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/etsy/status');
+        if (!res.ok || !active) return;
+        const data: { connected?: boolean } = await res.json();
+        if (active) setEtsyConnected(Boolean(data.connected));
+      } catch {
+        /* sessiz geç — uyarı gösterilmez */
       }
     })();
     return () => {
@@ -330,6 +351,36 @@ export default function GeneratePage() {
 
   // Reddet/baştan başla — SADECE aktif run'ı temizler, girdileri (prompt, model, varyasyon,
   // referans, not, rakip analizi) KORUR. Böylece rakip linkini tekrar girip token harcamazsın.
+  // Hata almış bir run'ı kaldığı onay kapısına döndürür (yeni üretim maliyeti yok).
+  // Elde bir çıktı varsa anlamlıdır; yoksa buton gösterilmez.
+  const canResume = Boolean(
+    run &&
+      run.status === 'error' &&
+      (run.seo || run.variationUrls?.length),
+  );
+
+  async function resumeRun() {
+    if (!run) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/pipeline/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: run.id }),
+      });
+      const data = await readJson<{ status?: string; error?: string }>(res);
+      if (!res.ok) throw new Error(data.error ?? 'Run sürdürülemedi.');
+      // Yeni durumu (ve varsa güncel alanları) tek sorguda çek.
+      const fresh = await fetch(`/api/pipeline/status/${run.id}`);
+      if (fresh.ok) setRun(await fresh.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Run sürdürülemedi.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function resetRun() {
     stopPolling();
     setRun(null);
@@ -429,7 +480,7 @@ export default function GeneratePage() {
   const approveSeo = (seo: SeoData) => postStep('/api/pipeline/approve-seo', { seo });
   const publish = (price: number, thumbnailIndex: number) =>
     postStep('/api/pipeline/publish', { price, thumbnailIndex });
-  const pinPinterest = () => postStep('/api/pipeline/publish-pinterest', {});
+  const pinPinterest = (copy: PinCopy) => postStep('/api/pipeline/publish-pinterest', { ...copy });
 
   // Tek mockup yeniden üretimi — status awaiting_publish'te kalır; SADECE ilgili küçük resmi
   // spinner'a alıp o mockup URL'i değişene kadar polling eder (global ekran değişmez).
@@ -513,6 +564,26 @@ export default function GeneratePage() {
         </Card>
       ) : null}
 
+      {etsyConnected === false ? (
+        <Card className="mb-6 border-amber-200 bg-amber-50">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-amber-900">Etsy bağlı değil</p>
+              <p className="mt-1 text-sm text-amber-800">
+                Üretebilirsiniz ama son adımda &quot;Etsy&apos;ye yayınla&quot; çalışmaz. Mockup ve dosya
+                maliyetini boşa harcamamak için önce bağlanın.
+              </p>
+            </div>
+            <a
+              href="/api/auth/etsy/start"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
+            >
+              Etsy&apos;ye bağlan
+            </a>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Rakip SEO analizi — üretim öncesi ön-adım */}
       {!run ? (
         <CompetitorResearchPanel
@@ -545,6 +616,12 @@ export default function GeneratePage() {
                 <option value="flux">FLUX.1 Kontext [pro] (fal.ai)</option>
                 <option value="imagen">Imagen 4 (Google)</option>
               </select>
+              {model === 'imagen' && referenceFile ? (
+                <p className="mt-1.5 text-xs text-amber-600">
+                  Imagen 4 görsel girdisi kabul etmiyor — referans görselli üretim FLUX.1 Kontext ile
+                  yapılacak.
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700">Varyasyon sayısı</label>
@@ -583,8 +660,9 @@ export default function GeneratePage() {
               />
             ) : null}
             <p className="mt-2 text-xs text-zinc-400">
-              Referans modunda görsel doğrudan kopyalanmaz; Claude Vision görseli analiz edip İngilizce
-              transformation instruction üretir ve Prompt kutusuna yazar.
+              Referans görsel modele doğrudan girdi olarak verilir (FLUX.1 Kontext image-to-image), yani
+              model görseli gerçekten görür. Birebir kopya çıkmaması için Prompt&apos;un bir değişim
+              talimatı olması gerekir — aşağıdaki &quot;Talimat üret&quot; bunu Claude Vision ile hazırlar.
             </p>
 
             {referenceFile ? (
@@ -786,8 +864,21 @@ export default function GeneratePage() {
             <h2 className="text-lg font-semibold">Hata</h2>
           </div>
           <p className="mt-3 text-sm text-zinc-600">{run.errorMessage}</p>
-          <div className="mt-5">
-            <Button onClick={reset}>Yeni üretim</Button>
+          {canResume ? (
+            <p className="mt-2 text-sm text-zinc-500">
+              Üretilmiş çıktılar (görsel, SEO, mockup, dosyalar) duruyor. Hatanın sebebini
+              giderdiyseniz bu run&apos;ı baştan üretmeden kaldığı adımdan sürdürebilirsiniz.
+            </p>
+          ) : null}
+          <div className="mt-5 flex flex-wrap gap-3">
+            {canResume ? (
+              <Button onClick={resumeRun} disabled={busy}>
+                {busy ? <Spinner /> : null} Kaldığı adımdan sürdür
+              </Button>
+            ) : null}
+            <Button variant={canResume ? 'ghost' : 'primary'} onClick={reset}>
+              Yeni üretim
+            </Button>
           </div>
         </Card>
       ) : null}
@@ -961,6 +1052,8 @@ function PublishReview({
         listing <strong>aktif</strong> edilir. <strong>Thumbnail</strong> seçtiğin mockup olur.
       </p>
 
+      <PipelineWarnings run={run} />
+
       {/* Mockup'lar */}
       <div className="mt-5">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
@@ -1026,9 +1119,20 @@ function PublishReview({
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Zoom video</p>
           {run.mediaUrls?.video ? (
-            <video src={run.mediaUrls.video} controls className="mt-2 w-full rounded-lg ring-1 ring-zinc-200" />
+            <>
+              <video src={run.mediaUrls.video} controls className="mt-2 w-full rounded-lg ring-1 ring-zinc-200" />
+              <a
+                href={run.mediaUrls.video}
+                download
+                className="mt-1 inline-block text-sm text-rose-600 hover:underline"
+              >
+                mp4 indir
+              </a>
+            </>
           ) : (
-            <p className="mt-2 text-sm text-zinc-400">yok</p>
+            <p className="mt-2 text-sm text-amber-700">
+              yok — video üretilemedi. Yayın devam eder ama listing videosuz olur.
+            </p>
           )}
         </div>
         <div>
@@ -1095,6 +1199,26 @@ function PublishReview({
   );
 }
 
+/**
+ * Yayını bloklamayan uyarılar (örn. "Etsy videoyu kabul etmedi"). Bunlar eskiden yalnızca
+ * sunucu loguna yazılıyordu; kullanıcı listing'de video olmadığını görüyor ama sebebini
+ * öğrenemiyordu. Artık gate 3 ve "Yayınlandı" ekranında görünür.
+ */
+function PipelineWarnings({ run }: { run: PipelineRun }) {
+  const warnings = run.publishProgress?.warnings ?? [];
+  if (warnings.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <p className="text-sm font-medium text-amber-900">Dikkat edilmesi gerekenler</p>
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-800">
+        {warnings.map((w) => (
+          <li key={w}>{w}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DoneView({
   run,
   onReset,
@@ -1103,7 +1227,7 @@ function DoneView({
 }: {
   run: PipelineRun;
   onReset: () => void;
-  onPinPinterest: () => void;
+  onPinPinterest: (copy: PinCopy) => void;
   pinning: boolean;
 }) {
   return (
@@ -1112,6 +1236,7 @@ function DoneView({
         <span className="grid size-7 place-items-center rounded-full bg-green-100 text-sm">✓</span>
         <h2 className="text-lg font-semibold">Yayınlandı</h2>
       </div>
+      <PipelineWarnings run={run} />
       <dl className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-lg bg-zinc-50 px-4 py-3">
           <dt className="text-zinc-500">Etsy Listing ID</dt>
@@ -1137,22 +1262,145 @@ function DoneView({
           >
             ✓ Pinterest&apos;te pinlendi →
           </a>
-        ) : (
-          <>
-            <Button variant="ghost" onClick={onPinPinterest} disabled={pinning}>
-              {pinning ? <Spinner /> : null}
-              {pinning ? 'Pinleniyor…' : "Pinterest'te pinle"}
-            </Button>
-            <a
-              href="/api/auth/pinterest/start"
-              className="text-xs text-zinc-400 hover:text-zinc-600"
-            >
-              Pinterest hesabını bağla
-            </a>
-          </>
-        )}
+        ) : null}
       </div>
+
+      {run.pinterestPinId ? null : (
+        <PinterestPanel runId={run.id} onPin={onPinPinterest} pinning={pinning} />
+      )}
     </Card>
+  );
+}
+
+/**
+ * Pinterest pin onay kapısı: metni Claude üretir, kullanıcı DÜZENLEYİP onaylar, sonra pinlenir.
+ * Etsy listing'i taslak bırakıldığı için pin otomatik zincirlenmez — kullanıcı listing'i
+ * Etsy panelinden aktive ettikten sonra buradan tetikler (ölü linke pin atılmasın).
+ */
+function PinterestPanel({
+  runId,
+  onPin,
+  pinning,
+}: {
+  runId: string;
+  onPin: (copy: PinCopy) => void;
+  pinning: boolean;
+}) {
+  const [copy, setCopy] = useState<PinCopy | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  async function prepare() {
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const res = await fetch('/api/pipeline/pin-copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: runId }),
+      });
+      const data = await readJson<{ copy?: PinCopy; warning?: string; error?: string }>(res);
+      if (!res.ok || !data.copy) throw new Error(data.error ?? 'Pin metni alınamadı.');
+      setCopy(data.copy);
+      if (data.warning) setWarning(data.warning);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Pin metni alınamadı.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!copy) {
+    return (
+      <div className="mt-5 border-t border-zinc-100 pt-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" onClick={() => void prepare()} disabled={loading}>
+            {loading ? <Spinner /> : null}
+            {loading ? 'Metin hazırlanıyor…' : "Pinterest'te pinle"}
+          </Button>
+          <a href="/api/auth/pinterest/start" className="text-xs text-zinc-400 hover:text-zinc-600">
+            Pinterest hesabını bağla
+          </a>
+        </div>
+        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      </div>
+    );
+  }
+
+  const update = (patch: Partial<PinCopy>) => setCopy({ ...copy, ...patch });
+
+  return (
+    <div className="mt-5 border-t border-zinc-100 pt-5">
+      <h3 className="text-sm font-semibold text-zinc-900">Pinterest pin metni</h3>
+      <p className="mt-1 text-sm text-zinc-500">
+        Pinlemeden önce düzenleyebilirsiniz. Pin, Etsy listing&apos;ine bağlanır — listing&apos;i
+        Etsy panelinden aktive ettiğinizden emin olun.
+      </p>
+      {warning ? <p className="mt-2 text-sm text-amber-700">{warning}</p> : null}
+
+      <div className="mt-3 space-y-3">
+        <LabeledField label="Başlık" hint={`${copy.title.length}/100`}>
+          <input
+            value={copy.title}
+            maxLength={100}
+            onChange={(e) => update({ title: e.target.value })}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </LabeledField>
+        <LabeledField label="Açıklama" hint={`${copy.description.length}/500`}>
+          <textarea
+            value={copy.description}
+            maxLength={500}
+            rows={4}
+            onChange={(e) => update({ description: e.target.value })}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </LabeledField>
+        <LabeledField label="Alternatif metin (erişilebilirlik)" hint={`${copy.altText.length}/500`}>
+          <textarea
+            value={copy.altText}
+            maxLength={500}
+            rows={2}
+            onChange={(e) => update({ altText: e.target.value })}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </LabeledField>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button onClick={() => onPin(copy)} disabled={pinning || !copy.title.trim()}>
+          {pinning ? <Spinner /> : null}
+          {pinning ? 'Pinleniyor…' : 'Onayla ve pinle'}
+        </Button>
+        <Button variant="ghost" onClick={() => void prepare()} disabled={loading || pinning}>
+          {loading ? <Spinner /> : null}
+          Metni yeniden üret
+        </Button>
+      </div>
+      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+    </div>
+  );
+}
+
+function LabeledField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <label className="text-sm font-medium text-zinc-700">{label}</label>
+        {hint ? <span className="text-xs text-zinc-400">{hint}</span> : null}
+      </div>
+      {children}
+    </div>
   );
 }
 

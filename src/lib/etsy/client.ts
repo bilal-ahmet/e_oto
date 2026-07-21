@@ -35,6 +35,24 @@ export async function getValidEtsyToken(): Promise<string> {
   return token.accessToken;
 }
 
+/**
+ * Access token'ın süresi dolmamış olsa bile refresh_token'ı KULLANIR ve yenisini saklar.
+ *
+ * NEDEN: Etsy'nin refresh token'ı ~90 gün geçerlidir ve her kullanımda yenilenir (sayaç sıfırlanır).
+ * Uygulama Etsy'yi yalnızca yayın anında çağırdığından, iki yayın arasında 90 gün geçerse token
+ * ölür ve elle yeniden yetkilendirme gerekir. `cron/token-refresh.ts` bunu periyodik çağırarak
+ * sayacı sürekli sıfır tutar — kullanıcının hiçbir şey yapması gerekmez.
+ *
+ * @returns Yenileme yapıldıysa true; token yoksa/refresh_token yoksa false.
+ */
+export async function refreshEtsyTokenNow(): Promise<boolean> {
+  const token = await getOAuthToken('etsy');
+  if (!token?.refreshToken) return false;
+  const refreshed = await refreshAccessToken(token.refreshToken);
+  await upsertOAuthToken('etsy', refreshed.accessToken, refreshed.refreshToken, refreshed.expiresAt);
+  return true;
+}
+
 interface EtsyFetchOptions {
   method?: string;
   /** JSON gövde (Content-Type otomatik application/json). */

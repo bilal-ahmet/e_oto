@@ -8,9 +8,7 @@
 
 import { randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
-
-const AUTH_URL = 'https://www.pinterest.com/oauth/';
-const TOKEN_URL = 'https://api.pinterest.com/v5/oauth/token';
+import { AUTH_URL, tokenUrl } from './hosts';
 
 // CLAUDE.md §8: pin okuma/yazma + board okuma (board_id çözümü için).
 export const PINTEREST_SCOPES = ['pins:read', 'pins:write', 'boards:read'];
@@ -25,7 +23,12 @@ export function generateState(): string {
 
 export interface PinterestTokens {
   accessToken: string;
-  refreshToken: string;
+  /**
+   * Yenileme akışında Pinterest bunu HER ZAMAN döndürmez. undefined geldiğinde çağıran
+   * DB'deki mevcut refresh token'ı KORUMALIDIR — null'a çekmek bağlantıyı sessizce öldürür
+   * (bir sonraki yenileme yapılamaz, kullanıcı bunu ancak pin atarken görür).
+   */
+  refreshToken?: string;
   expiresAt: Date;
 }
 
@@ -58,7 +61,7 @@ export function buildAuthUrl(state: string): string {
 
 interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
   token_type: string;
 }
@@ -71,7 +74,7 @@ async function postToken(body: Record<string, string>): Promise<PinterestTokens>
   const { clientId, clientSecret } = requirePinterestConfig();
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetch(tokenUrl(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -101,7 +104,14 @@ export function exchangeCode(code: string): Promise<PinterestTokens> {
   });
 }
 
-/** Süresi dolan access token'ı refresh_token ile yeniler. */
+/**
+ * Süresi dolan access token'ı refresh_token ile yeniler.
+ *
+ * Pinterest yalnızca "continuous refresh" destekler: refresh token 60 gün geçerlidir ama
+ * her kullanımda yenilenir, yani düzenli kullanıldığı sürece süresiz yaşar. Uygulama
+ * Pinterest'i yalnızca pin atarken çağırdığından cron/token-refresh.ts bunu periyodik
+ * olarak tazeler (aksi halde iki pin arasında 60 gün geçerse bağlantı ölür).
+ */
 export function refreshAccessToken(refreshToken: string): Promise<PinterestTokens> {
   return postToken({
     grant_type: 'refresh_token',

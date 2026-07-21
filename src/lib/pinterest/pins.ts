@@ -4,36 +4,51 @@
  */
 
 import { getEnv } from '@/lib/env';
+import { getSetting } from '@/lib/db/queries';
 import { pinterestFetch } from './client';
 
-function requirePinterestBoardConfig(): string {
-  const env = getEnv();
-  if (!env.PINTEREST_BOARD_ID) {
-    throw new Error('PINTEREST_BOARD_ID tanımlı değil — pin oluşturulacak board seçilmemiş.');
-  }
-  return env.PINTEREST_BOARD_ID;
+/**
+ * Pin atılacak board: önce panelden seçilen değer (app_settings), yoksa eski PINTEREST_BOARD_ID
+ * env'i (geriye dönük uyumluluk). İkisi de yoksa hata EYLEM içerir — kullanıcı hattın sonunda
+ * "board yok" deyip ne yapacağını bilmeden kalmasın.
+ */
+async function resolveBoardId(): Promise<string> {
+  const selected = await getSetting('pinterest_board_id');
+  if (selected) return selected;
+
+  const fromEnv = getEnv().PINTEREST_BOARD_ID;
+  if (fromEnv) return fromEnv;
+
+  throw new Error(
+    'Pin atılacak board seçilmemiş — /admin sayfasındaki Pinterest kartından bir board seçin.',
+  );
 }
 
 interface CreatePinResponse {
   id: string;
 }
 
+export interface CreatePinInput {
+  imageUrl: string;
+  link: string;
+  title: string;
+  description?: string;
+  /** Görme engelli kullanıcılar + Pinterest görsel araması için alternatif metin. */
+  altText?: string;
+}
+
 /** Yeni bir pin oluşturur, oluşan pin id'sini döner. */
-export async function createPin(
-  imageUrl: string,
-  link: string,
-  title: string,
-  description?: string,
-): Promise<string> {
-  const boardId = requirePinterestBoardConfig();
+export async function createPin(input: CreatePinInput): Promise<string> {
+  const boardId = await resolveBoardId();
   const data = await pinterestFetch<CreatePinResponse>('/pins', {
     method: 'POST',
     json: {
       board_id: boardId,
-      link,
-      title,
-      description,
-      media_source: { source_type: 'image_url', url: imageUrl },
+      link: input.link,
+      title: input.title,
+      description: input.description,
+      alt_text: input.altText,
+      media_source: { source_type: 'image_url', url: input.imageUrl },
     },
   });
   return data.id;

@@ -28,7 +28,12 @@ const schema = z.object({
   PINTEREST_CLIENT_ID: optStr(),
   PINTEREST_CLIENT_SECRET: optStr(),
   PINTEREST_REDIRECT_URI: optUrl(),
-  PINTEREST_BOARD_ID: optStr(), // pin oluşturulacak sabit board (v1: board seçim UI'ı yok)
+  // Trial access = pin YALNIZCA api-sandbox.pinterest.com'da oluşturulabilir; standart
+  // erişim onaylanınca 'production' yapılır (bkz. lib/pinterest/hosts.ts).
+  PINTEREST_API_ENV: z.preprocess(emptyToUndef, z.enum(['sandbox', 'production']).default('production')),
+  // Board artık panelden seçilir (app_settings.pinterest_board_id); bu env yalnızca
+  // geriye dönük uyumluluk/override içindir.
+  PINTEREST_BOARD_ID: optStr(),
 
   // Faz 4 — Görsel üretim (şimdi opsiyonel)
   GOOGLE_API_KEY: optStr(), // Imagen (Google AI Studio)

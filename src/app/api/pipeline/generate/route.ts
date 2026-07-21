@@ -76,7 +76,9 @@ async function handle(req: NextRequest) {
     await linkCompetitorResearchToRun(competitorResearchId, run.id);
   }
 
-  // Referans görseli kayıt amaçlı sakla (telif: birebir kopya üretilmez — bkz. claude/vision).
+  // Referans görseli sakla. ÜRETİMDE KULLANILIR: generateVariations bunu depodan okuyup fal
+  // storage'a yükler ve FLUX Kontext'e image_url olarak verir (telif: birebir kopya değil —
+  // prompt, Instruction Üretici'nin "değiştir" talimatıdır, bkz. claude/vision).
   if (reference) {
     const ext = reference.mediaType.split('/')[1] ?? 'png';
     const url = await putObject(
@@ -87,8 +89,8 @@ async function handle(req: NextRequest) {
     await updatePipelineRun(run.id, { referenceImageUrl: url });
   }
 
-  // Arka planda üret; UI polling ile takip eder.
-  // (Referans modunda prompt zaten Instruction Üretici'nin onaylı transformation instruction'ıdır.)
+  // Arka planda üret; UI polling ile takip eder. Referans varsa generateVariations onu run'dan
+  // okuyup image-to-image moduna geçer (referansın DB'ye yazımı yukarıda await edilmiştir).
   void generateVariations(run.id, model, prompt, variations);
 
   return NextResponse.json({ ...run, status: 'generating_image' }, { status: 202 });

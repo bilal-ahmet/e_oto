@@ -20,8 +20,9 @@ import { upscale } from '@/lib/upscale/client';
 import { packageJpegs } from '@/lib/packaging/resize-and-export';
 import { generateAllMockups, generateMockup } from '@/lib/mockup/client';
 import { MOCKUP_SCENES } from '@/lib/mockup/scenes';
-import { uploadBuffer } from '@/lib/fal';
+import { hasFal, uploadBuffer } from '@/lib/fal';
 import { createPin } from '@/lib/pinterest/pins';
+import { fallbackPinCopy, generatePinCopy } from '@/lib/claude/pin-copy';
 import { makeZoomVideo } from '@/lib/video/zoom';
 import { getSizeGuide } from '@/lib/listing/size-guide';
 import {
@@ -34,7 +35,7 @@ import {
   uploadListingImage,
   uploadListingVideo,
 } from '@/lib/etsy/listings';
-import type { ImageModel, MediaUrls, PipelineRun, PublishProgress, SeoData } from '@/types';
+import type { ImageModel, MediaUrls, PinCopy, PipelineRun, PublishProgress, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
@@ -88,8 +89,14 @@ async function withRunLease(runId: string, step: string, fn: () => Promise<void>
 
 /**
  * Kapı 1 — Seçilen modelle `count` varyasyon üretir; run'ı awaiting_approval'a getirir.
- * `prompt` zaten nihai metindir (referans modunda Instruction Üretici'nin ürettiği transformation
- * instruction, kullanıcı onayından geçip Prompt olarak gelir) — burada ek zenginleştirme yapılmaz.
+ *
+ * `prompt` zaten nihai metindir (Instruction Üretici'nin transformation instruction'ı kullanıcı
+ * onayından geçip Prompt olarak gelir) — burada ek zenginleştirme yapılmaz.
+ *
+ * REFERANS GÖRSEL: run'a `referenceImageUrl` yazılmışsa (route yükleme sonrası yazar) görsel
+ * depodan okunup fal storage'a yüklenir ve modele `image_url` olarak GİRDİ verilir. Önceden
+ * referans yalnızca kayıt amaçlı saklanıyor, modele hiç ulaşmıyordu; çıktı prompt metnine
+ * bağlı kalıp referansla alakasız çıkıyordu. Referans modunda üretim daima FLUX Kontext i2i'dir.
  */
 export async function generateVariations(
   runId: string,
@@ -111,7 +118,30 @@ export async function generateVariations(
 
       await updatePipelineRun(runId, { status: 'generating_image', errorMessage: null });
 
-      const images = await generateImages(model, prompt, count);
+      // Referans varsa fal storage'a yükle (i2i modelleri image_url'i fal sunucusundan çeker;
+      // lokal/Spaces URL'i yerine fal URL'i kullanılır — mockup akışıyla aynı desen).
+      let referenceUrl: string | undefined;
+      let effectiveModel = model;
+      if (existing?.referenceImageUrl) {
+        if (!hasFal()) {
+          throw new Error(
+            'Referans görselli üretim FLUX (fal.ai) gerektirir — FAL_KEY tanımlı değil. ' +
+              'Referansı kaldırıp metin prompt ile üretebilirsiniz.',
+          );
+        }
+        const contentType = mediaTypeFromUrl(existing.referenceImageUrl);
+        const buffer = await readObject(keyFromUrl(existing.referenceImageUrl));
+        referenceUrl = await uploadBuffer(buffer, contentType, `reference.${contentType.split('/')[1]}`);
+
+        // Imagen 4 görsel girdisi almıyor — referans modunda FLUX'a düşülür; run'a da yazılır ki
+        // UI'da ve kayıtta gerçekten kullanılan model görünsün.
+        if (effectiveModel !== 'flux') {
+          effectiveModel = 'flux';
+          await updatePipelineRun(runId, { imageModel: 'flux' });
+        }
+      }
+
+      const images = await generateImages(effectiveModel, prompt, count, referenceUrl);
       const variationUrls: string[] = [];
       for (let i = 0; i < images.length; i++) {
         variationUrls.push(
@@ -159,12 +189,18 @@ async function selectImageForRunInner(runId: string, url: string): Promise<void>
     await updatePipelineRun(runId, { generatedImageUrl: url, status: 'generating_seo', errorMessage: null });
 
     // Etsy izin verilen öznitelik değerlerini çek (Claude tam eşleşen değer seçsin); Etsy yoksa serbest.
+    // Hata BİLEREK yutulur (Etsy'siz de SEO üretilebilmeli) ama SESSİZ değil: buradaki başarısızlık
+    // çoğu zaman "Etsy bağlı değil" demektir ve kullanıcı bunu yayın adımına kadar öğrenemiyordu.
     let allowedValues: Record<string, string[]> | undefined;
     try {
       const taxId = await getDigitalPrintsTaxonomyId();
       allowedValues = await getAttributeOptions(taxId);
-    } catch {
+    } catch (e) {
       allowedValues = undefined;
+      console.warn(
+        `[pipeline] run ${runId}: Etsy taksonomi/öznitelik listesi alınamadı — öznitelikler serbest metin olarak üretilecek. ` +
+          `Sebep: ${e instanceof Error ? e.message : e}`,
+      );
     }
 
     // Rakip SEO analizine bağlıysa, üretilen özgün başlık/etiketleri SEO'ya referans olarak ver.
@@ -300,7 +336,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
         media.video = await putObject(`runs/${runId}/zoom.mp4`, video, 'video/mp4');
         await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: video
       } catch (e) {
-        console.warn('[pipeline] video üretimi atlandı:', e instanceof Error ? e.message : e);
+        await addWarning(runId, `Zoom videosu üretilemedi: ${e instanceof Error ? e.message : e}`);
       }
     }
 
@@ -427,16 +463,26 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
       await updatePipelineRun(runId, { publishProgress: pp });
     }
 
-    // 5) Video — bir kez (best-effort; hata olsa da işaretlenir, yayını bloklamaz).
+    // 5) Video — best-effort: yayını BLOKLAMAZ ama hata artık yutulmaz.
+    // `videoDone` yalnızca BAŞARIDA işaretlenir; başarısızlıkta run sürdürülürse tekrar denenir.
     if (run.mediaUrls?.video && !pp.videoDone) {
       try {
         const vid = await readObject(keyFromUrl(run.mediaUrls.video));
         await uploadListingVideo(shopId, listingId, vid, 'zoom.mp4');
+        pp.videoDone = true;
       } catch (e) {
-        console.warn('[pipeline] video yüklenemedi:', e instanceof Error ? e.message : e);
+        await addWarning(
+          runId,
+          `Etsy videoyu kabul etmedi — listing videosuz yayınlandı. Videoyu Etsy panelinden elle ` +
+            `ekleyebilirsiniz (dosya gate 3 ekranında indirilebilir). Sebep: ${e instanceof Error ? e.message : e}`,
+        );
+        // addWarning publishProgress'i tazeledi; kendi kopyamıza uyarıları geri al ki üzerine yazmayalım.
+        const fresh = await getPipelineRun(runId);
+        pp.warnings = fresh?.publishProgress?.warnings ?? pp.warnings;
       }
-      pp.videoDone = true;
       await updatePipelineRun(runId, { publishProgress: pp });
+    } else if (!run.mediaUrls?.video && !pp.videoDone) {
+      await addWarning(runId, 'Bu run için zoom videosu üretilmemişti — listing videosuz yayınlandı.');
     }
 
     // 6) Dijital dosyalar: 5 JPG — key bazlı checkpoint (resume'da yüklenmişleri atlar).
@@ -463,11 +509,11 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
  * yayında-olmayan bir listing'e pin atmak ölü link üretir, bu yüzden otomatik zincirlenmez).
  * Etsy adımının aksine tek atomik `POST /pins` çağrısıdır — checkpoint yok, resume tüm işlemi tekrarlar.
  */
-export async function publishToPinterest(runId: string): Promise<void> {
-  return withRunLease(runId, 'publishToPinterest', () => publishToPinterestInner(runId));
+export async function publishToPinterest(runId: string, copy?: PinCopy): Promise<void> {
+  return withRunLease(runId, 'publishToPinterest', () => publishToPinterestInner(runId, copy));
 }
 
-async function publishToPinterestInner(runId: string): Promise<void> {
+async function publishToPinterestInner(runId: string, copy?: PinCopy): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -482,10 +528,27 @@ async function publishToPinterestInner(runId: string): Promise<void> {
     if (!imageUrl) throw new Error('Pinlenecek bir mockup görseli bulunamadı.');
 
     const listingUrl = `https://www.etsy.com/listing/${run.etsyListingId}`;
-    const title = (run.seo?.title ?? 'Printable Wall Art').slice(0, 100);
-    const description = run.seo?.hook?.slice(0, 500);
 
-    const pinId = await createPin(imageUrl, listingUrl, title, description);
+    // Kullanıcı gate'te metni onayladıysa o kullanılır. Onaysız (ör. kurtarma sweeper'ı)
+    // çağrıda metin üretilir; Claude patlarsa eski davranışa düşülür — pin, yalnızca metin
+    // üretimi başarısız oldu diye kaybedilmemeli.
+    let pinCopy = copy;
+    if (!pinCopy) {
+      try {
+        pinCopy = run.seo ? await generatePinCopy(run.seo) : fallbackPinCopy(run.seo);
+      } catch (e) {
+        console.warn('[pinterest] Pin metni üretilemedi, Etsy SEO metnine düşülüyor:', e);
+        pinCopy = fallbackPinCopy(run.seo);
+      }
+    }
+
+    const pinId = await createPin({
+      imageUrl,
+      link: listingUrl,
+      title: pinCopy.title,
+      description: pinCopy.description,
+      altText: pinCopy.altText,
+    });
     await updatePipelineRun(runId, { pinterestPinId: pinId, status: 'done', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
@@ -495,6 +558,25 @@ async function publishToPinterestInner(runId: string): Promise<void> {
 async function fail(runId: string, err: unknown): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
   await updatePipelineRun(runId, { status: 'error', errorMessage: message });
+}
+
+/**
+ * Yayını bloklamayan bir sorunu run'a KALICI olarak yazar (UI gate 3 / "tamamlandı" ekranında
+ * gösterilir). `console.warn` tek başına yetmiyordu: kullanıcı listing'de video olmadığını
+ * görüyor ama sebebini öğrenemiyordu ve sunucu loglarına bakmak zorunda kalıyordu.
+ */
+async function addWarning(runId: string, message: string): Promise<void> {
+  console.warn(`[pipeline] run ${runId} uyarı: ${message}`);
+  try {
+    const fresh = await getPipelineRun(runId);
+    const pp: PublishProgress = { ...(fresh?.publishProgress ?? {}) };
+    const warnings = [...(pp.warnings ?? [])];
+    if (!warnings.includes(message)) warnings.push(message);
+    pp.warnings = warnings.slice(-10); // sınırlı tut
+    await updatePipelineRun(runId, { publishProgress: pp });
+  } catch {
+    /* uyarı yazımı asla akışı bozmamalı */
+  }
 }
 
 /** Reddedilen görsel için run'ı hata/iptal durumuna alır. */

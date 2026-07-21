@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Card, PageHeader } from '@/components/ui';
 import { StatusBadge } from '@/components/StatusBadge';
+import { EtsyConnection } from '@/components/EtsyConnection';
+import { PinterestConnection } from '@/components/PinterestConnection';
 import { listCompetitorListings, listCompetitorShops, listPipelineRuns } from '@/lib/db/queries';
 
 // Her istekte taze veri (DB'den).
@@ -15,7 +17,15 @@ function formatDate(iso: string): string {
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  // OAuth callback'leri buraya `?etsy=...` veya `?pinterest=...` (+ hata durumunda
+  // `&reason=...`) ile döner. `reason` iki sağlayıcı arasında paylaşılır; hangisi hata
+  // döndüyse yalnızca ona verilir.
+  searchParams: Promise<{ etsy?: string; pinterest?: string; reason?: string }>;
+}) {
+  const { etsy, pinterest, reason } = await searchParams;
   const [runs, listings, shops] = await Promise.all([
     listPipelineRuns(50),
     listCompetitorListings(),
@@ -52,6 +62,9 @@ export default async function DashboardPage() {
           Taslaklar →
         </Link>
       </div>
+
+      <EtsyConnection callbackResult={{ status: etsy, reason: etsy ? reason : undefined }} />
+      <PinterestConnection callbackResult={{ status: pinterest, reason: pinterest ? reason : undefined }} />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {stats.map((s) => (

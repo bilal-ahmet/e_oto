@@ -2,7 +2,8 @@
  * Next.js instrumentation hook — server başlangıcında bir kez çalışır (yalnızca Node.js runtime).
  *   1) Zorunlu env değişkenlerini erken doğrular (fail-fast).
  *   2) Pipeline kurtarma cron'unu kaydeder (varsayılan açık; PIPELINE_RECOVERY_ENABLED=false ile kapatılır).
- *   3) COMPETITOR_CRON_ENABLED=true ise rakip tarama cron'unu kaydeder.
+ *   3) Etsy token tazeleme cron'unu kaydeder (varsayılan açık; ETSY_TOKEN_REFRESH_ENABLED=false ile kapatılır).
+ *   4) COMPETITOR_CRON_ENABLED=true ise rakip tarama cron'unu kaydeder.
  */
 
 export async function register(): Promise<void> {
@@ -20,7 +21,13 @@ export async function register(): Promise<void> {
     registerRecoveryCron();
   }
 
-  // 3) Rakip tarama (opt-in).
+  // 3) Etsy token canlı tutma — refresh token'ın 90 günlük penceresi hiç dolmasın.
+  if (process.env.ETSY_TOKEN_REFRESH_ENABLED !== 'false') {
+    const { registerTokenRefreshCron } = await import('@/cron/token-refresh');
+    registerTokenRefreshCron();
+  }
+
+  // 4) Rakip tarama (opt-in).
   if (process.env.COMPETITOR_CRON_ENABLED === 'true') {
     const { registerCompetitorScanCron } = await import('@/cron/competitor-scan');
     registerCompetitorScanCron();

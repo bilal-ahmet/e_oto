@@ -4,7 +4,8 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { exchangeCode } from '@/lib/pinterest/oauth';
-import { upsertOAuthToken } from '@/lib/db/queries';
+import { apiEnv } from '@/lib/pinterest/hosts';
+import { getSetting, setSetting, upsertOAuthToken } from '@/lib/db/queries';
 import { env } from '@/lib/env';
 
 export async function GET(req: NextRequest) {
@@ -27,7 +28,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokens = await exchangeCode(code);
-    await upsertOAuthToken('pinterest', tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
+    const previousEnv = await getSetting('pinterest_token_env');
+
+    await upsertOAuthToken('pinterest', tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt);
+    // Token'ın hangi ortama ait olduğunu işaretle — sandbox token'ı production'da (ve tersi)
+    // geçersizdir; kart bu uyuşmazlığı gösterip yeniden yetkilendirmeye yönlendirir.
+    await setSetting('pinterest_token_env', apiEnv());
+
+    // Board seçimi ortama özgüdür (sandbox board ID'leri production'da yoktur). Yalnızca
+    // ortam DEĞİŞTİYSE seçim sıfırlanır; aynı ortamda yeniden yetkilendirmede korunur.
+    if (previousEnv && previousEnv !== apiEnv()) {
+      await setSetting('pinterest_board_id', '');
+    }
   } catch (e) {
     const reason = e instanceof Error ? e.message : 'token_exchange_failed';
     return NextResponse.redirect(`${base}/admin?pinterest=error&reason=${encodeURIComponent(reason)}`);

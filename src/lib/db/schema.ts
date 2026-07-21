@@ -127,6 +127,18 @@ export const imageDrafts = pgTable('image_drafts', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// app_settings
+// Panelden değiştirilebilen, deploy gerektirmeyen küçük ayarlar (key/value).
+// Örn. pinterest_board_id (pin atılacak board), pinterest_token_env (token'ın
+// hangi Pinterest ortamına ait olduğu — sandbox/production uyuşmazlığını yakalar).
+// ────────────────────────────────────────────────────────────────────────────
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ── Tip yardımcıları (queries.ts'de kullanılır) ──────────────────────────────
 export type OAuthTokenRow = typeof oauthTokens.$inferSelect;
 export type ImageDraftRow = typeof imageDrafts.$inferSelect;

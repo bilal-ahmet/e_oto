@@ -69,6 +69,17 @@ export interface SeoData {
 }
 
 /**
+ * Pinterest pin metni — Etsy SEO'sundan TÜRETİLİR ama ona eşit değildir: Pinterest'te
+ * başlık 100, açıklama 500 karakterle sınırlıdır ve arama davranışı Etsy'den farklıdır.
+ * Kullanıcı pinlemeden önce gate'te düzenleyebilir.
+ */
+export interface PinCopy {
+  title: string; // <=100 karakter, anahtar kelimeyle başlar
+  description: string; // <=500 karakter, doğal anahtar kelimeli
+  altText: string; // <=500 karakter, görselin erişilebilirlik açıklaması
+}
+
+/**
  * Etsy yayın adımının (publishToEtsy) checkpoint'i — restart sonrası dayanıklı, idempotent resume için.
  * Sweeper yarım kalan bir yayını kaldığı yerden sürdürür; çift listing/çift upload olmaz.
  */
@@ -79,8 +90,14 @@ export interface PublishProgress {
   attributesDone?: boolean; // öznitelikler yazıldı
   imagesUploaded?: number; // ordered görsel dizisinden kaç mockup yüklendi (sıralı checkpoint)
   sizeGuideDone?: boolean; // ölçü görseli yüklendi
-  videoDone?: boolean; // video yüklendi
+  videoDone?: boolean; // video yüklendi (yalnızca BAŞARILI yüklemede işaretlenir)
   filesUploaded?: string[]; // yüklenen dijital dosya key'leri (ratio_*)
+  /**
+   * Yayını BLOKLAMAYAN ama kullanıcının bilmesi gereken sorunlar (örn. video üretilemedi /
+   * Etsy videoyu reddetti). Eskiden bunlar yalnızca sunucu loguna `console.warn` ile yazılıyordu;
+   * kullanıcı listing'de video olmadığını görüyor ama sebebini asla öğrenemiyordu.
+   */
+  warnings?: string[];
 }
 
 export interface PipelineRun {

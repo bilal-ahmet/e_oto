@@ -64,6 +64,13 @@
       "when": 1784460782014,
       "tag": "0008_add_resilience_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784640700832,
+      "tag": "0009_add_app_settings",
+      "breakpoints": true
     }
   ]
 }
