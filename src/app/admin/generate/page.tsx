@@ -1502,8 +1502,17 @@ function CompetitorResearchPanel({
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Üretilen açıklama</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+              Üretilen açıklama{' '}
+              <span className="font-normal normal-case tracking-normal text-amber-600">
+                — sadece fikir amaçlı, listing&apos;e geçmez
+              </span>
+            </p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{research.generated.description}</p>
+            <p className="mt-1.5 text-xs text-zinc-400">
+              Üretime yalnızca yukarıdaki <strong>başlık ve etiketler</strong> referans olarak taşınır.
+              Listing açıklaması, seçtiğin görselden yazılan hook + sabit şablondan oluşur.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-zinc-500">

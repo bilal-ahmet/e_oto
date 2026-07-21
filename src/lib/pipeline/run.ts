@@ -204,6 +204,9 @@ async function selectImageForRunInner(runId: string, url: string): Promise<void>
     }
 
     // Rakip SEO analizine bağlıysa, üretilen özgün başlık/etiketleri SEO'ya referans olarak ver.
+    // `generatedDescription` BİLEREK taşınmaz: listing açıklaması sabit şablondan (hook + PERFECT FOR
+    // + gövde) kurulur, dolayısıyla analiz açıklaması yalnızca panelde fikir amaçlı gösterilir
+    // (UI'da da böyle etiketli). Buraya eklemeden önce şablon kararını yeniden değerlendir.
     let competitorRef: { title: string; tags: string[] } | undefined;
     if (run.competitorResearchId != null) {
       const research = await getCompetitorResearch(run.competitorResearchId);
