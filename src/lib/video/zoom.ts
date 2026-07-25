@@ -68,10 +68,13 @@ export async function makeZoomVideo(image: Buffer): Promise<Buffer> {
     const frames = DURATION * FPS;
     // Önce büyük ölçeğe çek (zoompan kalitesi), sonra yavaş zoom + çıkış boyutu.
     // zoompan varsayılan olarak sol-üste (0,0) zoom yapar; x/y ile TAM ORTAYA sabitlenir.
+    // min(...) içindeki virgül `\,` ile KAÇIŞLANIR: ffmpeg'in yeni filtergraph parser'ı
+    // (linux binary, 7.x) tek-tırnak korumasına güvenmez ve kaçışsız virgülü filtre
+    // ayıracı sanıp grafiği bozar ("Error applying option '...crop' to filter 'scale'").
     const vf =
       `scale=${OUT_W * 2}:${OUT_H * 2}:force_original_aspect_ratio=increase,` +
       `crop=${OUT_W * 2}:${OUT_H * 2},` +
-      `zoompan=z='min(zoom+0.0012,1.25)':` +
+      `zoompan=z='min(zoom+0.0012\\,1.25)':` +
       `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
       `d=${frames}:s=${OUT_W}x${OUT_H}:fps=${FPS},` +
       `format=yuv420p`;
