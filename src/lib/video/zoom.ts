@@ -66,15 +66,19 @@ export async function makeZoomVideo(image: Buffer): Promise<Buffer> {
   try {
     await writeFile(inPath, image);
     const frames = DURATION * FPS;
+    // Kademeli zoom artışı: 1.0'dan ~ZOOM_MAX'a `frames` kare boyunca lineer ulaşır.
+    // ÖNEMLİ: zoompan z ifadesinde `min(...)` KULLANMAYIZ — içindeki virgül, ffmpeg'in yeni
+    // linux filtergraph parser'ında (7.x) tek-tırnak korumasına rağmen filtre ayıracı sanılıp
+    // grafiği bozuyordu ("Error applying option '2700crop' to filter 'scale'"). Artışı kare
+    // sayısına göre hesaplayınca clamp'e (ve virgüle) hiç gerek kalmaz; ifade virgülsüz.
+    const ZOOM_MAX = 1.25;
+    const zInc = ((ZOOM_MAX - 1) / frames).toFixed(6);
     // Önce büyük ölçeğe çek (zoompan kalitesi), sonra yavaş zoom + çıkış boyutu.
     // zoompan varsayılan olarak sol-üste (0,0) zoom yapar; x/y ile TAM ORTAYA sabitlenir.
-    // min(...) içindeki virgül `\,` ile KAÇIŞLANIR: ffmpeg'in yeni filtergraph parser'ı
-    // (linux binary, 7.x) tek-tırnak korumasına güvenmez ve kaçışsız virgülü filtre
-    // ayıracı sanıp grafiği bozar ("Error applying option '...crop' to filter 'scale'").
     const vf =
       `scale=${OUT_W * 2}:${OUT_H * 2}:force_original_aspect_ratio=increase,` +
       `crop=${OUT_W * 2}:${OUT_H * 2},` +
-      `zoompan=z='min(zoom+0.0012\\,1.25)':` +
+      `zoompan=z='zoom+${zInc}':` +
       `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
       `d=${frames}:s=${OUT_W}x${OUT_H}:fps=${FPS},` +
       `format=yuv420p`;
