@@ -24,8 +24,8 @@ function resolveFfmpeg(): string {
 
 const DURATION = 8; // sn
 const FPS = 30;
-const OUT_W = 1080;
-const OUT_H = 1350; // 4:5
+const DEFAULT_W = 1080;
+const DEFAULT_H = 1350; // 4:5 (baskı dikey); TV için 1920×1080 geçilir
 
 /** ffmpeg asılırsa süreci öldür — pipeline adımı sonsuza kadar beklemesin. */
 const FFMPEG_TIMEOUT_MS = 5 * 60_000;
@@ -58,8 +58,14 @@ function runFfmpeg(args: string[]): Promise<void> {
 /**
  * Verilen görselden zoom video (mp4 buffer) üretir.
  * @param image Kaynak görsel buffer'ı (mockup veya master).
+ * @param dims Çıktı boyutu (varsayılan 1080×1350 dikey; TV için 1920×1080 geçilir).
  */
-export async function makeZoomVideo(image: Buffer): Promise<Buffer> {
+export async function makeZoomVideo(
+  image: Buffer,
+  dims?: { width: number; height: number },
+): Promise<Buffer> {
+  const OUT_W = dims?.width ?? DEFAULT_W;
+  const OUT_H = dims?.height ?? DEFAULT_H;
   const dir = await mkdtemp(path.join(tmpdir(), 'etsy-vid-'));
   const inPath = path.join(dir, 'in.png');
   const outPath = path.join(dir, 'out.mp4');

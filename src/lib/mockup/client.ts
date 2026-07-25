@@ -6,7 +6,7 @@
 
 import { falSubscribe, uploadBuffer, downloadImage } from '@/lib/fal';
 import { TIMEOUTS } from '@/lib/async/timeout';
-import { MOCKUP_SCENES, type MockupScene } from './scenes';
+import { type MockupScene } from './scenes';
 
 const MODEL = 'fal-ai/flux-pro/kontext';
 
@@ -52,13 +52,14 @@ export interface MockupResult {
 }
 
 /**
- * 8 sahnenin tamamını üretir. Master bir kez fal storage'a yüklenir, tüm sahnelerde kullanılır.
+ * Verilen sahnelerin tamamını üretir. Master bir kez fal storage'a yüklenir, tüm sahnelerde kullanılır.
  * Hatalı sahneler atlanır (ok=false) — biri patlarsa diğerleri devam eder.
+ * @param scenes Ürün tipine göre sahne listesi (`productConfig(...).mockupScenes`).
  */
-export async function generateAllMockups(master: Buffer): Promise<MockupResult[]> {
+export async function generateAllMockups(master: Buffer, scenes: MockupScene[]): Promise<MockupResult[]> {
   const masterUrl = await uploadBuffer(master, 'image/png', 'mockup-source.png');
   return Promise.all(
-    MOCKUP_SCENES.map(async (scene, index): Promise<MockupResult> => {
+    scenes.map(async (scene, index): Promise<MockupResult> => {
       try {
         const { buffer, contentType } = await generateMockup(masterUrl, scene);
         return { key: scene.key, index, ok: true, buffer, contentType };

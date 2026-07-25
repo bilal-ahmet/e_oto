@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_runs" ADD COLUMN "product_type" text DEFAULT 'print' NOT NULL;

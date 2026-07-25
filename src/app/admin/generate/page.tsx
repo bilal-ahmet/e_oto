@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
-import type { ImageDraft, ImageModel, PinCopy, PipelineRun, PipelineStatus, SeoData } from '@/types';
+import type { ImageDraft, ImageModel, PinCopy, PipelineRun, PipelineStatus, ProductType, SeoData } from '@/types';
 import { Button, Card, PageHeader, Spinner } from '@/components/ui';
 import { STATUS_META } from '@/lib/status';
 
@@ -112,9 +112,39 @@ async function readJson<T>(res: Response): Promise<T> {
   }
 }
 
+// Ürün tipi UI etiketleri (server-side productConfig'i client'a import ETMEDEN — o fal/node bağımlılıkları çeker).
+const PRODUCT_OPTIONS: { value: ProductType; label: string }[] = [
+  { value: 'print', label: 'Baskı (Dijital Print)' },
+  { value: 'tv', label: 'Frame TV (Ekran Sanatı)' },
+];
+
+/** Ürün tipine göre varyasyon önizleme oranı (üretilen sanat: print 3:4 dikey, tv 16:9 yatay). */
+function previewAspectClass(pt?: ProductType): string {
+  return pt === 'tv' ? 'aspect-video' : 'aspect-[3/4]';
+}
+
+/** Mockup kutusu oranı (print sahneleri 4:3, tv sahneleri 16:9). */
+function mockupAspectClass(pt?: ProductType): string {
+  return pt === 'tv' ? 'aspect-video' : 'aspect-[4/3]';
+}
+
+/** Dijital dosya anahtarını okunur etikete çevirir (print: '2:3', tv: '4K UHD'). */
+function fileLabel(key: string): string {
+  if (key === 'screen_4k') return '4K UHD';
+  if (key === 'screen_fhd') return 'Full HD';
+  return key.replace('ratio_', '').replace('x', ':');
+}
+
+/** Gate 3 dosya başlığı ("5 JPG, 300 DPI" / "2 JPG (4K + Full HD)"). */
+function filesSummary(pt: ProductType | undefined, count: number): string {
+  if (pt === 'tv') return `Dijital dosyalar (${count} JPG — 4K + Full HD, ekran)`;
+  return `Dijital dosyalar (${count} JPG, 300 DPI)`;
+}
+
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState<ImageModel>('flux');
+  const [productType, setProductType] = useState<ProductType>('print');
   const [variations, setVariations] = useState(3);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
@@ -437,6 +467,7 @@ export default function GeneratePage() {
         body: JSON.stringify({
           prompt: prompt.trim(),
           model,
+          productType,
           variations,
           referenceImage,
           competitorResearchId: research?.id,
@@ -604,6 +635,27 @@ export default function GeneratePage() {
             placeholder="Örn. Abstract boho wall art, neutral earthy tones, minimalist composition"
             className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
           />
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-zinc-700">Ürün tipi</label>
+            <select
+              value={productType}
+              onChange={(e) => setProductType(e.target.value as ProductType)}
+              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+            >
+              {PRODUCT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {productType === 'tv' ? (
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Frame TV: görsel <strong>16:9 yatay</strong> üretilir; 2 JPG (4K 3840×2160 + Full HD 1920×1080),
+                ekran açıklaması, 4 TV + 4 çerçeve mockup, 16:9 video. Ölçü görseli eklenmez.
+              </p>
+            ) : null}
+          </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
@@ -804,7 +856,7 @@ export default function GeneratePage() {
                     width={300}
                     height={400}
                     unoptimized
-                    className="aspect-[3/4] w-full object-cover"
+                    className={`${previewAspectClass(run.productType)} w-full object-cover`}
                   />
                   <span className="absolute inset-x-0 bottom-0 bg-black/50 py-1 text-center text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
                     Bu görseli seç
@@ -1083,10 +1135,10 @@ function PublishReview({
                       width={300}
                       height={225}
                       unoptimized
-                      className="aspect-[4/3] w-full object-cover"
+                      className={`${mockupAspectClass(run.productType)} w-full object-cover`}
                     />
                   ) : (
-                    <div className="grid aspect-[4/3] w-full place-items-center bg-zinc-100 text-xs text-zinc-400">
+                    <div className={`grid ${mockupAspectClass(run.productType)} w-full place-items-center bg-zinc-100 text-xs text-zinc-400`}>
                       boş
                     </div>
                   )}
@@ -1146,6 +1198,10 @@ function PublishReview({
               unoptimized
               className="mt-2 w-full rounded-lg object-contain ring-1 ring-zinc-200"
             />
+          ) : run.productType === 'tv' ? (
+            <p className="mt-2 text-sm text-zinc-400">
+              TV ürününde ölçü görseli kullanılmaz.
+            </p>
           ) : (
             <p className="mt-2 text-sm text-zinc-400">
               yok — <code>public/templates/size-guide.png</code> ekleyin
@@ -1156,12 +1212,14 @@ function PublishReview({
 
       {/* Dijital dosyalar */}
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Dijital dosyalar (5 JPG, 300 DPI)</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+          {filesSummary(run.productType, files.length)}
+        </p>
         <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
           {files.map(([key, url]) => (
             <li key={key} className="text-sm">
               <a href={url} target="_blank" rel="noreferrer" className="text-rose-600 hover:underline">
-                {key.replace('ratio_', '').replace('x', ':')}
+                {fileLabel(key)}
               </a>
             </li>
           ))}

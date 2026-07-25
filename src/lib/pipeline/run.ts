@@ -19,7 +19,7 @@ import { generateSeo } from '@/lib/claude/seo';
 import { upscale } from '@/lib/upscale/client';
 import { packageJpegs } from '@/lib/packaging/resize-and-export';
 import { generateAllMockups, generateMockup } from '@/lib/mockup/client';
-import { MOCKUP_SCENES } from '@/lib/mockup/scenes';
+import { productConfig } from '@/lib/product/config';
 import { hasFal, uploadBuffer } from '@/lib/fal';
 import { createPin } from '@/lib/pinterest/pins';
 import { fallbackPinCopy, generatePinCopy } from '@/lib/claude/pin-copy';
@@ -141,7 +141,9 @@ export async function generateVariations(
         }
       }
 
-      const images = await generateImages(effectiveModel, prompt, count, referenceUrl);
+      // Görsel oranı ürün tipinden gelir: print → 3:4 dikey, tv → 16:9 yatay.
+      const aspect = productConfig(existing?.productType).genAspect;
+      const images = await generateImages(effectiveModel, prompt, count, aspect, referenceUrl);
       const variationUrls: string[] = [];
       for (let i = 0; i < images.length; i++) {
         variationUrls.push(
@@ -222,6 +224,7 @@ async function selectImageForRunInner(runId: string, url: string): Promise<void>
       mediaTypeFromUrl(url),
       allowedValues,
       competitorRef,
+      run.productType,
     );
 
     await updatePipelineRun(runId, { seoJson: seo, status: 'awaiting_seo_approval', attempts: 0 });
@@ -264,6 +267,8 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
     if (!run.generatedImageUrl) throw new Error('Seçili görsel yok.');
 
+    const cfg = productConfig(run.productType); // dosya spec'leri, mockup sahneleri, video boyutu, ölçü görseli
+
     await updatePipelineRun(runId, { seoJson: seo, status: 'processing_files', errorMessage: null });
 
     // 1) Master (upscale ×4) — zaten üretilmişse Spaces'ten oku (idempotent resume; tekrar upscale yok).
@@ -291,7 +296,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
     let digitalFileUrls = run.digitalFileUrls as Record<string, string> | undefined;
     if (!digitalFileUrls || Object.keys(digitalFileUrls).length === 0) {
       const map: Record<string, string> = {};
-      await packageJpegs(master, async (f) => {
+      await packageJpegs(master, cfg.files, cfg.density, async (f) => {
         map[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
       });
       digitalFileUrls = map;
@@ -313,7 +318,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
 
       try {
-        const results = await generateAllMockups(mockupSource);
+        const results = await generateAllMockups(mockupSource, cfg.mockupScenes);
         const mockups: string[] = [];
         for (const r of results) {
           if (r.ok && r.buffer) {
@@ -325,7 +330,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
         media.mockups = mockups;
       } catch (e) {
         console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);
-        media.mockups = MOCKUP_SCENES.map(() => '');
+        media.mockups = cfg.mockupScenes.map(() => '');
       }
       await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: mockup'lar
     }
@@ -335,7 +340,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       try {
         const firstMockup = media.mockups.find((u) => u);
         const source = firstMockup ? await readObject(keyFromUrl(firstMockup)) : master;
-        const video = await makeZoomVideo(source);
+        const video = await makeZoomVideo(source, cfg.video);
         media.video = await putObject(`runs/${runId}/zoom.mp4`, video, 'video/mp4');
         await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: video
       } catch (e) {
@@ -343,8 +348,8 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       }
     }
 
-    // 5) Sabit ölçü görseli — yoksa ekle.
-    if (!media.sizeGuide) {
+    // 5) Sabit ölçü görseli — yalnızca kullanan ürün tiplerinde (print) ve yoksa ekle.
+    if (cfg.usesSizeGuide && !media.sizeGuide) {
       const sizeGuide = await getSizeGuide();
       if (sizeGuide) {
         media.sizeGuide = await putObject(
@@ -373,7 +378,7 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
     if (!run.upscaledImageUrl) throw new Error('Master görsel yok.');
-    const scene = MOCKUP_SCENES[index];
+    const scene = productConfig(run.productType).mockupScenes[index];
     if (!scene) throw new Error(`Geçersiz mockup index'i: ${index}`);
 
     // Status awaiting_publish'te kalır; UI sadece ilgili küçük resmi spinner'a alır ve

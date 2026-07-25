@@ -12,10 +12,11 @@ import {
 } from '@/lib/db/queries';
 import { generateVariations, type ReferenceImageInput } from '@/lib/pipeline/run';
 import { putObject } from '@/lib/storage';
-import type { ImageModel } from '@/types';
+import type { ImageModel, ProductType } from '@/types';
 
 const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const MODELS: ImageModel[] = ['imagen', 'flux'];
+const PRODUCT_TYPES: ProductType[] = ['print', 'tv'];
 
 export async function POST(req: NextRequest) {
   // Yakalanmamış hata Next.js production'da GÖVDESİZ 500 döner ve UI'da
@@ -33,6 +34,7 @@ async function handle(req: NextRequest) {
   let body: {
     prompt?: string;
     model?: string;
+    productType?: string;
     variations?: number;
     competitorResearchId?: number;
     referenceImage?: { base64?: string; mediaType?: string };
@@ -49,6 +51,11 @@ async function handle(req: NextRequest) {
   const model = (body.model ?? 'flux') as ImageModel;
   if (!MODELS.includes(model)) {
     return NextResponse.json({ error: 'Geçersiz model (imagen | flux).' }, { status: 400 });
+  }
+
+  const productType = (body.productType ?? 'print') as ProductType;
+  if (!PRODUCT_TYPES.includes(productType)) {
+    return NextResponse.json({ error: 'Geçersiz ürün tipi (print | tv).' }, { status: 400 });
   }
 
   const variations = Math.max(1, Math.min(Number(body.variations) || 1, 4));
@@ -69,7 +76,7 @@ async function handle(req: NextRequest) {
       ? body.competitorResearchId
       : undefined;
 
-  const run = await createPipelineRun(prompt, { imageModel: model, competitorResearchId });
+  const run = await createPipelineRun(prompt, { imageModel: model, competitorResearchId, productType });
 
   // Rakip analizine bağlıysa iki yönlü bağı tamamla (research → run).
   if (competitorResearchId) {

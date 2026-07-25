@@ -15,11 +15,11 @@
  */
 
 import { sharp } from '@/lib/image/sharp';
-import { PRINT_RATIOS, type RatioKey } from '@/types';
+import type { DigitalFileSpec } from '@/lib/product/config';
 
 export interface DigitalFile {
-  key: RatioKey;
-  filename: string; // örn. "ratio-2x3-24x36.jpg"
+  key: string; // digitalFileUrls anahtarı (print RatioKey veya tv 'screen_*')
+  filename: string; // örn. "ratio-2x3-24x36.jpg" / "frame-tv-4k-3840x2160.jpg"
   buffer: Buffer;
   contentType: 'image/jpeg';
 }
@@ -29,28 +29,32 @@ const START_QUALITY = 90;
 const MIN_QUALITY = 60;
 
 /**
- * Master görseli 5 oranın en büyük boyutuna resize + JPG (300 DPI) export eder.
+ * Master görseli verilen dosya spec'lerinin boyutlarına resize + JPG export eder.
  * @param master Upscale edilmiş (veya pass-through) master görsel buffer'ı.
+ * @param specs Ürün tipine göre dosya spec'leri (print: 5 oran, tv: 4K + Full HD). `productConfig(...).files`.
+ * @param density JPG DPI metadata (print 300, tv 72).
  * @param onFile Her dosya üretildiğinde çağrılır (sıralı, await edilir). Burada depoya yazıp
  *               buffer'ı bırakmak beklenir — fonksiyon çıktıları kendi içinde biriktirmez.
  */
 export async function packageJpegs(
   master: Buffer,
+  specs: DigitalFileSpec[],
+  density: number,
   onFile: (file: DigitalFile) => Promise<void>,
 ): Promise<void> {
-  for (const r of PRINT_RATIOS) {
+  for (const s of specs) {
     let quality = START_QUALITY;
     let buffer: Buffer;
     for (;;) {
       buffer = await sharp(master)
-        .resize(r.width, r.height, { fit: 'cover', position: 'centre' })
-        .withMetadata({ density: 300 }) // 300 DPI
+        .resize(s.width, s.height, { fit: 'cover', position: 'centre' })
+        .withMetadata({ density })
         // Baseline libjpeg — optimiseCoding/progressive tüm-görüntü katsayı tamponu ister (bkz. başlık).
         .jpeg({ quality, mozjpeg: false, progressive: false, optimiseCoding: false })
         .toBuffer();
       if (buffer.length <= MAX_BYTES || quality <= MIN_QUALITY) break;
       quality -= 5;
     }
-    await onFile({ key: r.key, filename: r.fileName, buffer, contentType: 'image/jpeg' });
+    await onFile({ key: s.key, filename: s.fileName, buffer, contentType: 'image/jpeg' });
   }
 }

@@ -32,6 +32,7 @@ import type {
   MediaUrls,
   PipelineRun,
   PipelineStatus,
+  ProductType,
   PublishProgress,
   SeoData,
 } from '@/types';
@@ -47,6 +48,7 @@ function rowToPipelineRun(row: PipelineRunRow): PipelineRun {
     id: row.id,
     status: row.status as PipelineStatus,
     prompt: row.prompt,
+    productType: (row.productType as ProductType) ?? 'print',
     imageModel: (row.imageModel as ImageModel) ?? undefined,
     competitorResearchId: row.competitorResearchId ?? undefined,
     referenceImageUrl: row.referenceImageUrl ?? undefined,
@@ -214,13 +216,19 @@ export async function setSetting(key: AppSettingKey, value: string): Promise<voi
 
 export async function createPipelineRun(
   prompt: string,
-  opts: { imageModel?: ImageModel; referenceImageUrl?: string; competitorResearchId?: number } = {},
+  opts: {
+    imageModel?: ImageModel;
+    referenceImageUrl?: string;
+    competitorResearchId?: number;
+    productType?: ProductType;
+  } = {},
 ): Promise<PipelineRun> {
   const now = new Date();
   const [row] = await db
     .insert(pipelineRuns)
     .values({
       prompt,
+      productType: opts.productType ?? 'print',
       imageModel: opts.imageModel ?? null,
       referenceImageUrl: opts.referenceImageUrl ?? null,
       competitorResearchId: opts.competitorResearchId ?? null,

@@ -11,8 +11,8 @@
 import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { anthropic, CLAUDE_MODEL } from './client';
-import { buildDescription } from '@/lib/listing/description';
-import type { SeoData } from '@/types';
+import { buildDescriptionFor } from '@/lib/listing/description';
+import type { ProductType, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
@@ -31,12 +31,23 @@ const SeoSchema = z.object({
   }),
 });
 
-const SYSTEM = `You are an Etsy SEO expert for a digital wall-art / printable shop (instant-download prints). Generate listing content in ENGLISH (Etsy's primary market). Rules:
+const SYSTEM_PRINT = `You are an Etsy SEO expert for a digital wall-art / printable shop (instant-download prints). Generate listing content in ENGLISH (Etsy's primary market). Rules:
 - title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Use " | " to separate keyword phrases (e.g. "Boho Abstract Arch Print | Terracotta Wall Art | Minimalist Digital Download").
 - hook: 2-3 sentences, product-specific, START with the main keyword. Include: what it is + style + which room/wall it fits + who/what occasion it suits. End by noting it is an instant digital download you can print and hang the same day. (This becomes the opening of the description.)
 - perfectFor: 3-5 short style/room/occasion keywords (e.g. "Coastal & Nautical Decor", "Beach House Wall Art", "Housewarming Gift").
 - tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. No '#', no commas inside a tag.
 - materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Printable art", "JPG file").`;
+
+const SYSTEM_TV = `You are an Etsy SEO expert for a digital Frame TV / TV screen art shop (instant-download art for Samsung Frame TV and smart displays). The artwork is 16:9 landscape and is displayed ON a screen, NOT printed. Generate listing content in ENGLISH (Etsy's primary market). Rules:
+- title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Lead with Frame TV / TV art intent. Use " | " to separate keyword phrases (e.g. "Halloween Frame TV Art | Spooky Samsung Frame TV Wallpaper | Digital TV Art 4K Download").
+- hook: 2-3 sentences, product-specific, START with the main keyword. Structure: what it is + scene description + style/colors + which decor style/season it suits + note it is an instant download. Make clear it is for SCREEN display (Samsung Frame TV / smart TVs), not a print. (This becomes the opening of the description.)
+- perfectFor: 3-5 short style/mood/occasion keywords (e.g. "Halloween Decor", "Frame TV Art Lovers", "Dark Academia Homes", "Spooky Season Ambiance").
+- tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Prefer TV/screen keywords ("frame tv art", "samsung frame", "tv wallpaper", "digital tv art"). No '#', no commas inside a tag.
+- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Frame TV art", "JPG file", "4K wallpaper").`;
+
+function systemFor(productType?: ProductType): string {
+  return productType === 'tv' ? SYSTEM_TV : SYSTEM_PRINT;
+}
 
 /** İzin verilen Etsy değerleri verildiğinde tam-eşleşme talimatı; yoksa serbest seçim. */
 function attributesInstruction(allowed?: Record<string, string[]>): string {
@@ -86,11 +97,12 @@ export async function generateSeo(
   mediaType: ImageMediaType,
   allowedValues?: Record<string, string[]>,
   competitorRef?: CompetitorRef,
+  productType?: ProductType,
 ): Promise<SeoData> {
   const message = await anthropic().messages.parse({
     model: CLAUDE_MODEL,
     max_tokens: 2048,
-    system: `${SYSTEM}\n${attributesInstruction(allowedValues)}`,
+    system: `${systemFor(productType)}\n${attributesInstruction(allowedValues)}`,
     output_config: { format: zodOutputFormat(SeoSchema) },
     messages: [
       {
@@ -117,7 +129,7 @@ export async function generateSeo(
     hook,
     perfectFor,
     tags: exactly(parsed.tags, 13, 'wall art').map((t) => t.slice(0, 20)),
-    description: buildDescription(hook, perfectFor),
+    description: buildDescriptionFor(productType, hook, perfectFor),
     materials: exactly(parsed.materials, 13, 'Digital download'),
     categoryId: '', // yayında Digital Prints taksonomi id ile doldurulur
     attributes: {

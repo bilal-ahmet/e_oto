@@ -15,7 +15,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { DigitalFileUrls, ImageModel, MediaUrls, PipelineStatus, PublishProgress, SeoData } from '@/types';
+import type { DigitalFileUrls, ImageModel, MediaUrls, PipelineStatus, ProductType, PublishProgress, SeoData } from '@/types';
 
 // ────────────────────────────────────────────────────────────────────────────
 // oauth_tokens
@@ -41,6 +41,8 @@ export const pipelineRuns = pgTable('pipeline_runs', {
     .notNull()
     .default('queued'),
   prompt: text('prompt').notNull(),
+  // Ürün tipi — üretim başında seçilir; tüm sonraki adımlar buna göre dallanır (lib/product/config).
+  productType: text('product_type').$type<ProductType>().notNull().default('print'),
   imageModel: text('image_model').$type<ImageModel>(),
   // Mantıksal FK → competitor_research.id. Döngüsel FK'yı (research ↔ run) kırmak için Drizzle
   // .references() KULLANILMAZ; bağ uygulama katmanında linkCompetitorResearchToRun ile kurulur.

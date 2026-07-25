@@ -18,6 +18,14 @@ export type PipelineStatus =
 export type ImageModel = 'imagen' | 'flux';
 
 /**
+ * Ürün tipi — üretimin EN BAŞINDA seçilir (görselin oranını belirlediği için sonradan değişemez).
+ * 'print' = dijital baskı (3:4 dikey, 5 JPG @300 DPI, baskı açıklaması, çerçeve mockup, ölçü görseli).
+ * 'tv'    = Frame TV / ekran sanatı (16:9 yatay, 2 JPG 4K+FullHD, ekran açıklaması, TV+çerçeve mockup, ölçü yok).
+ * Tüm ürün-tipi farkları `lib/product/config.ts` registry'sinde toplanır.
+ */
+export type ProductType = 'print' | 'tv';
+
+/**
  * Dijital ürün dosyaları (CLAUDE.md §1, §7, §10): oran başına TEK JPG, o oranın EN BÜYÜK boyutunda,
  * 300 DPI. Müşteri açıklamadaki alt boyutları baskıcıda küçülterek alır. 5 oran = 5 JPG (Etsy 5-dosya).
  * Boyutlar 300 DPI piksel (inç × 300). `key` aynı zamanda digitalFileUrls anahtarıdır.
@@ -38,8 +46,12 @@ export const PRINT_RATIOS = [
 
 export type RatioKey = (typeof PRINT_RATIOS)[number]['key'];
 
-/** processing_files çıktısı: her oran için JPG'nin public URL'i. */
-export type DigitalFileUrls = Partial<Record<RatioKey, string>>;
+/**
+ * processing_files çıktısı: her dijital dosya spec'i için JPG'nin public URL'i.
+ * Anahtar ürün tipine göre değişir: print → RatioKey (`ratio_2x3` …), tv → `screen_4k` / `screen_fhd`.
+ * Bu yüzden jenerik `Record<string,string>` (tüketiciler `Object.entries` ile gezer).
+ */
+export type DigitalFileUrls = Record<string, string>;
 
 /** Etsy'ye yüklenecek tanıtım medyası (8 mockup + 1 video + 1 ölçü görseli). */
 export interface MediaUrls {
@@ -104,6 +116,7 @@ export interface PipelineRun {
   id: string;
   status: PipelineStatus;
   prompt: string;
+  productType?: ProductType; // 'print' (varsayılan) | 'tv' — üretimin başında seçilir
   imageModel?: ImageModel; // hangi modelle üretildi
   competitorResearchId?: number; // rakip SEO analizinden beslendiyse (CompetitorResearch.id)
   referenceImageUrl?: string;
