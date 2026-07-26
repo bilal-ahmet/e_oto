@@ -19,13 +19,30 @@ export interface DigitalFileSpec {
   height: number;
 }
 
+/**
+ * JPG export ayarları (packaging/resize-and-export bunu uygular).
+ *
+ * `density` HER ÜRÜN TİPİNDE 300'dür — ekran ürününde DPI teknik olarak önemsiz olsa da
+ * dosyanın özelliklerinde "72 DPI" görünmesi alıcıya düşük kalite izlenimi verir.
+ *
+ * `quality`/`chromaSubsampling` ürün tipine göre ayrılır: baskı dosyaları ~77 megapiksel
+ * olduğundan ölçülmüş bellek/süre sözleşmesine sadık kalır (q90, 4:2:0 — bkz. packaging başlığı);
+ * TV dosyaları en fazla 8.3 MP olduğundan 20 MB tavanının çok altında kalır ve tam kroma
+ * (4:4:4) + yüksek kalite ile export edilir.
+ */
+export interface JpegExportSettings {
+  density: number; // JPG DPI metadata
+  quality: number; // başlangıç kalitesi (20MB'ı aşarsa packaging %5'er düşürür)
+  chromaSubsampling: '4:4:4' | '4:2:0';
+}
+
 export interface ProductConfig {
   type: ProductType;
   label: string; // UI select etiketi
   genAspect: FluxAspectRatio; // görsel üretim oranı
   previewAspectClass: string; // UI önizleme kutusu (tailwind aspect sınıfı)
   files: DigitalFileSpec[]; // packaging → dijital dosyalar
-  density: number; // JPG DPI metadata
+  jpeg: JpegExportSettings; // JPG export ayarları (DPI + kalite)
   video: { width: number; height: number }; // zoom video çıktı boyutu
   usesSizeGuide: boolean; // sabit ölçü görseli eklenir mi
   mockupScenes: MockupScene[]; // mockup sahneleri
@@ -53,7 +70,8 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     genAspect: '3:4',
     previewAspectClass: 'aspect-[3/4]',
     files: PRINT_FILES,
-    density: 300,
+    // 7200×10800 = 77 MP: kalite/kroma ölçülmüş bellek sözleşmesine göre sabit (packaging başlığı).
+    jpeg: { density: 300, quality: 90, chromaSubsampling: '4:2:0' },
     video: { width: 1080, height: 1350 }, // 4:5 dikey
     usesSizeGuide: true,
     mockupScenes: MOCKUP_SCENES,
@@ -64,7 +82,9 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     genAspect: '16:9',
     previewAspectClass: 'aspect-video',
     files: TV_FILES,
-    density: 72, // ekran; DPI pratikte önemsiz
+    // 4K = 8.3 MP → 20 MB tavanının çok altında; kalite/kroma yukarı çekilebilir.
+    // 300 DPI: ekranda anlamsız ama dosya özelliklerinde "72 DPI" görünmesi alıcıda kalite şüphesi yaratıyor.
+    jpeg: { density: 300, quality: 97, chromaSubsampling: '4:4:4' },
     video: { width: 1920, height: 1080 }, // 16:9 yatay
     usesSizeGuide: false,
     mockupScenes: TV_MOCKUP_SCENES,

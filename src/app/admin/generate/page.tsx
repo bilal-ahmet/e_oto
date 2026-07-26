@@ -135,9 +135,9 @@ function fileLabel(key: string): string {
   return key.replace('ratio_', '').replace('x', ':');
 }
 
-/** Gate 3 dosya başlığı ("5 JPG, 300 DPI" / "2 JPG (4K + Full HD)"). */
+/** Gate 3 dosya başlığı ("5 JPG, 300 DPI" / "2 JPG — 4K + Full HD, 300 DPI"). */
 function filesSummary(pt: ProductType | undefined, count: number): string {
-  if (pt === 'tv') return `Dijital dosyalar (${count} JPG — 4K + Full HD, ekran)`;
+  if (pt === 'tv') return `Dijital dosyalar (${count} JPG — 4K + Full HD, 300 DPI)`;
   return `Dijital dosyalar (${count} JPG, 300 DPI)`;
 }
 

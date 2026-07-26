@@ -70,7 +70,7 @@ export function buildTvDescription(hook: string, perfectFor: string[]): string {
 ${DIVIDER}
 
 ✦ WHAT YOU'LL RECEIVE
-2 high-resolution JPG files, ready for your screen:
+2 high-resolution JPG files (RGB, 300 DPI), ready for your screen:
 - 3840x2160 px (4K Ultra HD) — perfect fit for the Samsung Frame TV (16:9)
 - 1920x1080 px (Full HD) — for standard smart TVs and digital frames
 

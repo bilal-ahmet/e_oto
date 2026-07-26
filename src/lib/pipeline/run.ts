@@ -296,7 +296,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
     let digitalFileUrls = run.digitalFileUrls as Record<string, string> | undefined;
     if (!digitalFileUrls || Object.keys(digitalFileUrls).length === 0) {
       const map: Record<string, string> = {};
-      await packageJpegs(master, cfg.files, cfg.density, async (f) => {
+      await packageJpegs(master, cfg.files, cfg.jpeg, async (f) => {
         map[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
       });
       digitalFileUrls = map;
