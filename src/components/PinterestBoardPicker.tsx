@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import type { PinterestBoard } from '@/lib/pinterest/boards';
 
@@ -16,14 +17,19 @@ export function PinterestBoardPicker({
   boards,
   initialSelectedId,
   loadError,
+  sandbox,
 }: {
   boards: PinterestBoard[];
   initialSelectedId: string | null;
   loadError: string | null;
+  /** Sandbox'ta board pinterest.com'dan açılamaz — boş liste mesajı buna göre değişir. */
+  sandbox: boolean;
 }) {
+  const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [newName, setNewName] = useState('');
 
   async function select(boardId: string) {
     setSaving(true);
@@ -44,15 +50,62 @@ export function PinterestBoardPicker({
     }
   }
 
+  /** Board'u API üzerinden yaratır; sunucu bileşenini tazeleyerek listeye düşmesini sağlar. */
+  async function create() {
+    const name = newName.trim();
+    if (!name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/pinterest/boards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Board oluşturulamadı.');
+      setSelectedId(data.selectedBoardId ?? null);
+      setNewName('');
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Board oluşturulamadı.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const createForm = (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <input
+        value={newName}
+        onChange={(e) => setNewName(e.target.value)}
+        placeholder="Board adı (örn. Wall Art Prints)"
+        disabled={saving}
+        className="w-64 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+      />
+      <Button onClick={() => void create()} disabled={saving || !newName.trim()} className="px-3 py-1.5">
+        {saving ? 'Oluşturuluyor…' : 'Board oluştur'}
+      </Button>
+    </div>
+  );
+
   if (loadError) {
     return <p className="mt-3 text-sm text-red-700">Board listesi alınamadı: {loadError}</p>;
   }
 
   if (boards.length === 0) {
     return (
-      <p className="mt-3 text-sm text-amber-800">
-        Hesapta hiç board yok — Pinterest&apos;te bir board oluşturup bu sayfayı yenileyin.
-      </p>
+      <div className="mt-3">
+        <p className="text-sm text-amber-800">
+          {sandbox
+            ? // Sandbox'ta board API'siz yaratılamaz; kullanıcı pinterest.com'da board açıp
+              // burada neden görünmediğini anlamaya çalışarak vakit kaybetmesin.
+              'Sandbox hesabında board yok. Sandbox’ın board’ları pinterest.com’dakilerden ayrıdır — orada açtığınız board burada GÖRÜNMEZ; aşağıdan oluşturun.'
+            : 'Hesapta hiç board yok — aşağıdan oluşturun veya Pinterest’te açıp sayfayı yenileyin.'}
+        </p>
+        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+        {createForm}
+      </div>
     );
   }
 
@@ -83,6 +136,7 @@ export function PinterestBoardPicker({
       {!selectedId ? (
         <p className="mt-2 text-sm text-amber-800">Henüz board seçilmedi — seçmeden pin atılamaz.</p>
       ) : null}
+      {createForm}
     </div>
   );
 }

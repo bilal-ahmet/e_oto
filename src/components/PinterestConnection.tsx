@@ -174,6 +174,7 @@ export async function PinterestConnection({
             boards={boards}
             initialSelectedId={meta.boardId}
             loadError={boardsError}
+            sandbox={sandbox}
           />
         </div>
         {connectButton}

@@ -32,3 +32,19 @@ export async function listBoards(): Promise<PinterestBoard[]> {
     privacy: b.privacy ?? 'PUBLIC',
   }));
 }
+
+/**
+ * Yeni board oluşturur.
+ *
+ * NEDEN GEREKLİ: Sandbox'ın (trial access) varlık dünyası production'dan AYRIDIR —
+ * pinterest.com arayüzünde elle açılan board sandbox API'sinde görünmez, `listBoards`
+ * boş döner. Sandbox'ta board yalnızca bu uçla yaratılabilir. Standart erişimde de zararsız:
+ * board'u panelden açmak, ID'yi elle bulmaktan kolay.
+ */
+export async function createBoard(name: string, description?: string): Promise<PinterestBoard> {
+  const data = await pinterestFetch<{ id: string; name: string; privacy?: string }>('/boards', {
+    method: 'POST',
+    json: { name, description, privacy: 'PUBLIC' },
+  });
+  return { id: data.id, name: data.name, privacy: data.privacy ?? 'PUBLIC' };
+}

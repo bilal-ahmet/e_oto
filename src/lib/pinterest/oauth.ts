@@ -10,8 +10,10 @@ import { randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
 import { AUTH_URL, tokenUrl } from './hosts';
 
-// CLAUDE.md §8: pin okuma/yazma + board okuma (board_id çözümü için).
-export const PINTEREST_SCOPES = ['pins:read', 'pins:write', 'boards:read'];
+// CLAUDE.md §8: pin okuma/yazma + board okuma (board_id çözümü) + board yazma.
+// boards:write ŞART: sandbox'ın board'ları production'dan ayrıdır ve pinterest.com arayüzünden
+// oluşturulamaz — panelin board yaratabilmesi (lib/pinterest/boards.createBoard) buna bağlı.
+export const PINTEREST_SCOPES = ['pins:read', 'pins:write', 'boards:read', 'boards:write'];
 
 function base64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
