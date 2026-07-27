@@ -48,3 +48,13 @@ export async function createBoard(name: string, description?: string): Promise<P
   });
   return { id: data.id, name: data.name, privacy: data.privacy ?? 'PUBLIC' };
 }
+
+/**
+ * Board'u ve İÇİNDEKİ TÜM PİNLERİ kalıcı olarak siler (Pinterest'te geri alınamaz).
+ *
+ * createBoard ile aynı gerekçe: sandbox board'ları pinterest.com arayüzünde görünmediğinden
+ * yanlışlıkla açılan bir board'u temizlemenin başka yolu yok.
+ */
+export async function deleteBoard(boardId: string): Promise<void> {
+  await pinterestFetch(`/boards/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
+}

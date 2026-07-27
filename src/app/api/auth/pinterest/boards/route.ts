@@ -2,6 +2,7 @@
  * GET  /api/auth/pinterest/boards → hesaptaki board'ları + seçili olanı döner.
  * POST /api/auth/pinterest/boards → { boardId } seçimini app_settings'e yazar,
  *                                   { name } ise YENİ board oluşturup onu seçer.
+ * DELETE /api/auth/pinterest/boards?boardId=… → board'u Pinterest'ten siler.
  *
  * Panel kartındaki board seçici bunu kullanır; board ID'si artık env değil DB'de tutulur
  * (sandbox → production geçişinde board yeniden seçilmek zorunda, redeploy beklemesin).
@@ -10,7 +11,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSetting, setSetting } from '@/lib/db/queries';
-import { createBoard, listBoards } from '@/lib/pinterest/boards';
+import { createBoard, deleteBoard, listBoards } from '@/lib/pinterest/boards';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,4 +58,25 @@ export async function POST(req: NextRequest) {
 
   await setSetting('pinterest_board_id', boardId);
   return NextResponse.json({ ok: true, selectedBoardId: boardId });
+}
+
+export async function DELETE(req: NextRequest) {
+  const boardId = req.nextUrl.searchParams.get('boardId')?.trim();
+  if (!boardId) return NextResponse.json({ error: 'boardId zorunlu.' }, { status: 400 });
+
+  try {
+    await deleteBoard(boardId);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Board silinemedi.' },
+      { status: 502 },
+    );
+  }
+
+  // Silinen board seçiliyse seçim de temizlenir — aksi halde pin adımı var olmayan bir
+  // board'a POST edip hattın sonunda 404 ile patlardı.
+  if ((await getSetting('pinterest_board_id')) === boardId) {
+    await setSetting('pinterest_board_id', '');
+  }
+  return NextResponse.json({ ok: true });
 }

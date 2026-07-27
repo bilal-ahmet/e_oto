@@ -50,6 +50,31 @@ export function PinterestBoardPicker({
     }
   }
 
+  /**
+   * Board'u Pinterest'ten siler. Geri alınamaz (içindeki pinler de gider) — bu yüzden onay istenir.
+   * Sandbox board'ları pinterest.com'da görünmediğinden silmenin tek yolu burası.
+   */
+  async function remove(board: PinterestBoard) {
+    if (!confirm(`"${board.name}" board'u ve içindeki tüm pinler kalıcı olarak silinecek. Emin misiniz?`)) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/auth/pinterest/boards?boardId=${encodeURIComponent(board.id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Board silinemedi.');
+      if (selectedId === board.id) setSelectedId(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Board silinemedi.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /** Board'u API üzerinden yaratır; sunucu bileşenini tazeleyerek listeye düşmesini sağlar. */
   async function create() {
     const name = newName.trim();
@@ -117,19 +142,32 @@ export function PinterestBoardPicker({
         {boards.map((b) => {
           const active = b.id === selectedId;
           return (
-            <Button
-              key={b.id}
-              variant={active ? 'primary' : 'ghost'}
-              disabled={saving}
-              onClick={() => void select(b.id)}
-              className="px-3 py-1.5"
-            >
-              {active ? '✓ ' : ''}
-              {b.name}
-              {b.privacy !== 'PUBLIC' ? (
-                <span className={active ? 'text-rose-100' : 'text-zinc-400'}>(gizli)</span>
-              ) : null}
-            </Button>
+            // Silme düğmesi seçim düğmesinin İÇİNE konamaz (iç içe <button> geçersiz HTML) —
+            // bu yüzden ikisi yan yana tek bir çip içinde durur.
+            <span key={b.id} className="inline-flex items-center gap-1">
+              <Button
+                variant={active ? 'primary' : 'ghost'}
+                disabled={saving}
+                onClick={() => void select(b.id)}
+                className="px-3 py-1.5"
+              >
+                {active ? '✓ ' : ''}
+                {b.name}
+                {b.privacy !== 'PUBLIC' ? (
+                  <span className={active ? 'text-rose-100' : 'text-zinc-400'}>(gizli)</span>
+                ) : null}
+              </Button>
+              <Button
+                variant="danger"
+                disabled={saving}
+                onClick={() => void remove(b)}
+                className="px-2 py-1.5"
+                title={`"${b.name}" board'unu sil`}
+                aria-label={`"${b.name}" board'unu sil`}
+              >
+                ×
+              </Button>
+            </span>
           );
         })}
       </div>
