@@ -15,6 +15,16 @@ import { createBoard, deleteBoard, listBoards } from '@/lib/pinterest/boards';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Pinterest çağrısı patladığında dönülecek durum kodu.
+ *
+ * 502/504 KULLANMAYIN: DigitalOcean/Cloudflare origin'den gelen bu kodları kendi HTML hata
+ * sayfalarıyla DEĞİŞTİRİR — gövdedeki gerçek hata mesajı tarayıcıya hiç ulaşmaz, panel de
+ * HTML'i JSON sanıp "Unexpected token '<'" verir. 424 (Failed Dependency) semantik olarak
+ * doğru ("bağımlı olduğumuz servis başarısız") ve 4xx olduğu için ara katmanlar dokunmaz.
+ */
+const UPSTREAM_FAILED = 424;
+
 export async function GET() {
   try {
     const [boards, selectedBoardId] = await Promise.all([listBoards(), getSetting('pinterest_board_id')]);
@@ -22,7 +32,7 @@ export async function GET() {
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Board listesi alınamadı.' },
-      { status: 502 },
+      { status: UPSTREAM_FAILED },
     );
   }
 }
@@ -46,7 +56,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       return NextResponse.json(
         { error: e instanceof Error ? e.message : 'Board oluşturulamadı.' },
-        { status: 502 },
+        { status: UPSTREAM_FAILED },
       );
     }
   }
@@ -69,7 +79,7 @@ export async function DELETE(req: NextRequest) {
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Board silinemedi.' },
-      { status: 502 },
+      { status: UPSTREAM_FAILED },
     );
   }
 

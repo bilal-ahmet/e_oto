@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Tarama başarısız.';
-    return NextResponse.json({ error: message }, { status: 502 });
+    // 502 DEĞİL: DigitalOcean/Cloudflare origin 502'sini kendi HTML hata sayfasıyla değiştirir
+    // ve buradaki mesaj panele hiç ulaşmaz. 424 = "bağımlı olduğumuz servis (Etsy) başarısız".
+    return NextResponse.json({ error: message }, { status: 424 });
   }
 }
