@@ -8,6 +8,7 @@
 
 import { randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
+import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 import { AUTH_URL, tokenUrl } from './hosts';
 
 // CLAUDE.md §8: pin okuma/yazma + board okuma (board_id çözümü) + board yazma.
@@ -76,14 +77,21 @@ async function postToken(body: Record<string, string>): Promise<PinterestTokens>
   const { clientId, clientSecret } = requirePinterestConfig();
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-  const res = await fetch(tokenUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Basic ${basic}`,
+  // Timeout ŞART: token ucu asıldığında ONU BEKLEYEN her Pinterest çağrısı da asılıyor
+  // (getValidPinterestToken önce buradan geçer) — tek bir yavaş istek tüm paneli kilitler.
+  const res = await fetchWithTimeout(
+    tokenUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${basic}`,
+      },
+      body: new URLSearchParams(body).toString(),
     },
-    body: new URLSearchParams(body).toString(),
-  });
+    TIMEOUTS.pinterest,
+    'Pinterest token isteği',
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Pinterest token isteği başarısız (${res.status}): ${text}`);

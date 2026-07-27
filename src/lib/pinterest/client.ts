@@ -7,6 +7,7 @@
 
 import pThrottle from 'p-throttle';
 import { getOAuthToken, setSetting, upsertOAuthToken } from '@/lib/db/queries';
+import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 import { refreshAccessToken } from './oauth';
 import { apiBase, apiEnv } from './hosts';
 
@@ -73,8 +74,11 @@ interface PinterestFetchOptions {
   headers?: Record<string, string>;
 }
 
+// Zaman aşımı ŞART (CLAUDE.md §11/6): timeout'suz bir Pinterest çağrısı asıldığında route hiç
+// cevap dönmüyor, proxy HTML 504 basıyor ve panel onu JSON sanıp "Unexpected token '<'" veriyordu.
 const rawFetch = throttle(
-  async (url: string, init: RequestInit): Promise<Response> => fetch(url, init),
+  async (url: string, init: RequestInit): Promise<Response> =>
+    fetchWithTimeout(url, init, TIMEOUTS.pinterest, 'Pinterest API çağrısı'),
 );
 
 /**

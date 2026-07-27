@@ -13,6 +13,30 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import type { PinterestBoard } from '@/lib/pinterest/boards';
 
+/**
+ * Yanıtı güvenle okur ve hatalıysa fırlatır.
+ *
+ * NEDEN doğrudan res.json() DEĞİL: route'a hiç ulaşılamadığında (proxy 502/504, dağıtım anı)
+ * gövde JSON değil HTML olur; res.json() o zaman "Unexpected token '<'" fırlatır ve kullanıcı
+ * gerçek sorunu (ağ geçidi zaman aşımı) göremez.
+ */
+async function readJson<T>(res: Response, fallbackMessage: string): Promise<T> {
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      res.ok
+        ? fallbackMessage
+        : `Sunucu ${res.status} döndü (yanıt JSON değil). İşlem zaman aşımına uğramış olabilir — sayfayı yenileyip durumu kontrol edin.`,
+    );
+  }
+  const parsed = data as { error?: string };
+  if (!res.ok) throw new Error(parsed.error ?? fallbackMessage);
+  return parsed as T;
+}
+
 export function PinterestBoardPicker({
   boards,
   initialSelectedId,
@@ -40,8 +64,7 @@ export function PinterestBoardPicker({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ boardId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Board seçimi kaydedilemedi.');
+      await readJson(res, 'Board seçimi kaydedilemedi.');
       setSelectedId(boardId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Board seçimi kaydedilemedi.');
@@ -64,12 +87,14 @@ export function PinterestBoardPicker({
       const res = await fetch(`/api/auth/pinterest/boards?boardId=${encodeURIComponent(board.id)}`, {
         method: 'DELETE',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Board silinemedi.');
+      await readJson(res, 'Board silinemedi.');
       if (selectedId === board.id) setSelectedId(null);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Board silinemedi.');
+      // Zaman aşımında silme sunucu tarafında TAMAMLANMIŞ olabilir — listeyi tazele ki
+      // kullanıcı hata mesajına bakıp board'un hâlâ durduğunu sanmasın.
+      router.refresh();
     } finally {
       setSaving(false);
     }
@@ -87,8 +112,7 @@ export function PinterestBoardPicker({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Board oluşturulamadı.');
+      const data = await readJson<{ selectedBoardId?: string }>(res, 'Board oluşturulamadı.');
       setSelectedId(data.selectedBoardId ?? null);
       setNewName('');
       router.refresh();

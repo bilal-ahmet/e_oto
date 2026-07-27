@@ -58,6 +58,13 @@ export const TIMEOUTS = {
   claude: 3 * 60_000,
   /** Etsy REST çağrısı (medya yüklemeleri dahil). */
   etsy: 2 * 60_000,
+  /**
+   * Pinterest REST çağrısı. Diğerlerinden KISA olmasının sebebi: bu çağrılar bir kullanıcı
+   * isteğinin (panel butonları) içinde senkron bekletiliyor. Barındırma proxy'si ~60 sn'de
+   * kendi HTML 504'ünü basıyor ve istemci onu JSON sanıp ayrıştırmaya çalışıyordu; bütçe
+   * bunun ALTINDA kalmalı ki kullanıcı anlaşılır bir JSON hatası görsün.
+   */
+  pinterest: 30_000,
   /** fal storage upload / CDN indirme. */
   transfer: 3 * 60_000,
   /** ffmpeg zoom videosu. */
