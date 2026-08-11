@@ -16,6 +16,24 @@ const API_BASE = 'https://openapi.etsy.com/v3/application';
 // Etsy ~10 req/s (CLAUDE.md §2, §10).
 const throttle = pThrottle({ limit: 10, interval: 1000 });
 
+/**
+ * Yenilenen token'ı saklar.
+ *
+ * KRİTİK: Etsy yenileme yanıtında refresh_token'ı her zaman döndürmez. Gelen undefined'ı olduğu
+ * gibi yazmak refresh_token_encrypted'ı NULL yapar (queries.upsertOAuthToken falsy değeri NULL'a
+ * çevirir) ve bağlantıyı sessizce öldürür: bir sonraki yenileme yapılamaz, kullanıcı bunu ancak
+ * yayın anında "Etsy bağlantısı yok" olarak görür. Bu yüzden gelmediğinde eldeki korunur.
+ * (Aynı koruma Pinterest tarafında `pinterest/client.persistTokens` içindedir.)
+ */
+export async function persistEtsyTokens(
+  accessToken: string,
+  refreshToken: string | undefined,
+  previousRefreshToken: string | null,
+  expiresAt: Date | null,
+): Promise<void> {
+  await upsertOAuthToken('etsy', accessToken, refreshToken ?? previousRefreshToken, expiresAt);
+}
+
 /** Geçerli (gerekirse yenilenmiş) Etsy access token döner. */
 export async function getValidEtsyToken(): Promise<string> {
   const token = await getOAuthToken('etsy');
@@ -28,7 +46,12 @@ export async function getValidEtsyToken(): Promise<string> {
 
   if (expiringSoon && token.refreshToken) {
     const refreshed = await refreshAccessToken(token.refreshToken);
-    await upsertOAuthToken('etsy', refreshed.accessToken, refreshed.refreshToken, refreshed.expiresAt);
+    await persistEtsyTokens(
+      refreshed.accessToken,
+      refreshed.refreshToken,
+      token.refreshToken,
+      refreshed.expiresAt,
+    );
     return refreshed.accessToken;
   }
 
@@ -49,7 +72,12 @@ export async function refreshEtsyTokenNow(): Promise<boolean> {
   const token = await getOAuthToken('etsy');
   if (!token?.refreshToken) return false;
   const refreshed = await refreshAccessToken(token.refreshToken);
-  await upsertOAuthToken('etsy', refreshed.accessToken, refreshed.refreshToken, refreshed.expiresAt);
+  await persistEtsyTokens(
+    refreshed.accessToken,
+    refreshed.refreshToken,
+    token.refreshToken,
+    refreshed.expiresAt,
+  );
   return true;
 }
 

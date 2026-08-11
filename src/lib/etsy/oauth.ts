@@ -33,7 +33,13 @@ function challengeFor(verifier: string): string {
 
 export interface EtsyTokens {
   accessToken: string;
-  refreshToken: string;
+  /**
+   * Yenileme akışında sağlayıcı bunu HER ZAMAN döndürmeyebilir. undefined geldiğinde çağıran
+   * DB'deki mevcut refresh token'ı KORUMALIDIR — null'a çekmek bağlantıyı sessizce öldürür
+   * (bir sonraki yenileme yapılamaz, kullanıcı bunu ancak yayın anında görür).
+   * Koruma `client.persistEtsyTokens` içindedir; upsert'ü doğrudan çağırma.
+   */
+  refreshToken?: string;
   expiresAt: Date;
 }
 
@@ -62,7 +68,7 @@ export function buildAuthUrl(verifier: string, state: string): string {
 
 interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
   token_type: string;
 }

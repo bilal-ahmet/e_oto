@@ -28,7 +28,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokens = await exchangeCode(code, verifier);
-    await upsertOAuthToken('etsy', tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
+    // İlk yetkilendirmede korunacak eski token yok (yeniden bağlanmada eskisi zaten geçersiz),
+    // bu yüzden persistEtsyTokens değil doğrudan upsert. Yenilemedeki koruma için bkz. etsy/client.
+    await upsertOAuthToken('etsy', tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt);
   } catch (e) {
     const reason = e instanceof Error ? e.message : 'token_exchange_failed';
     return NextResponse.redirect(`${base}/admin?etsy=error&reason=${encodeURIComponent(reason)}`);
