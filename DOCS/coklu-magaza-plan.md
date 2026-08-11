@@ -1,5 +1,10 @@
 # Plan A — Çoklu Mağaza (Multi-Account) Desteği
 
+> ⚠️ **DURUM: UYGULANMADI — bu bir öneridir, mevcut mimari DEĞİLDİR.**
+> Kodda çoklu mağaza yapısı yok: `accounts` tablosu yok, `oauth_tokens.provider` hâlâ UNIQUE
+> (tek Etsy + tek Pinterest hesabı), `pipeline_runs`'ta `account_id` kolonu yok.
+> Bu dosyaya dayanarak kod yazma; önce bu planın uygulanmasına karar verilmesi gerekir.
+
 > Amaç: Sistemin tek Etsy mağazası + tek Pinterest hesabı varsayımını kaldırıp, panelden
 > mağaza (hesap) seçerek birden fazla Etsy mağazasına ürün yükleyebilmek ve her mağazaya
 > ayrı bir Pinterest hesabı/board'u bağlayabilmek.
