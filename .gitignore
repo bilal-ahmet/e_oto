@@ -42,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code — makineye özel izin listesi (.claude/skills/ commit EDİLİR, bu edilmez)
+.claude/settings.local.json
