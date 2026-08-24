@@ -14,28 +14,43 @@ function isActive(pathname: string, href: string): boolean {
   return href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 }
 
+/**
+ * Panel üst barı — marka sitesinin header'ıyla aynı ritim ve şekil dili
+ * (bkz. src/app/(marketing)/layout.tsx): kâğıt zemin, kum çizgi, serif marka adı,
+ * mono etiketler, sağda hap bağlantı.
+ *
+ * Aktif link DOLGU ile değil ALTIN ÇİZGİ ile işaretlenir — dolgu gri hap, kâğıt
+ * zeminde bir "buton" gibi okunup tıklanabilir sanılıyordu.
+ */
 export function Nav() {
   const pathname = usePathname();
+
   return (
-    <header className="border-b border-zinc-200 bg-white">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4 sm:px-6">
-        <Link href="/admin" className="mr-4 flex items-center gap-2 font-semibold text-zinc-900">
-          <span className="grid size-7 place-items-center rounded-md bg-rose-600 text-sm text-white">
-            E
+    <header className="border-b border-sand bg-paper">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 sm:px-6 lg:px-8">
+        <Link
+          href="/admin"
+          className="flex shrink-0 items-baseline gap-2 font-display text-lg tracking-tight text-ink"
+        >
+          Velora
+          <span className="font-mono text-label uppercase tracking-label text-ink-faint">
+            Panel
           </span>
-          Etsy AI Otomasyon
         </Link>
-        <nav className="flex items-center gap-1">
+
+        {/* Dar ekranda linkler yatay şeride döner — 4 link 375px'te sıkışıyordu. */}
+        <nav className="-mb-4 flex min-w-0 flex-1 items-center gap-5 overflow-x-auto pb-4">
           {LINKS.map((link) => {
             const active = isActive(pathname, link.href);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                aria-current={active ? 'page' : undefined}
+                className={`shrink-0 border-b-2 pb-1 font-mono text-label uppercase tracking-label transition-colors ${
                   active
-                    ? 'bg-zinc-100 text-zinc-900'
-                    : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                    ? 'border-gold text-ink'
+                    : 'border-transparent text-ink-muted hover:text-ink'
                 }`}
               >
                 {link.label}
@@ -43,6 +58,13 @@ export function Nav() {
             );
           })}
         </nav>
+
+        <a
+          href="/"
+          className="shrink-0 rounded-full border border-ink px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
+        >
+          Mağaza sitesi
+        </a>
       </div>
     </header>
   );
