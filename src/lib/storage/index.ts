@@ -14,9 +14,15 @@
  * Yalnızca server-side import edilir (API route'ları).
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { env } from '@/lib/env';
 
 // ── Sürücü tespiti ────────────────────────────────────────────────────────────
@@ -77,6 +83,12 @@ async function readLocal(key: string): Promise<Buffer> {
   return readFile(path.join(UPLOADS_DIR, key));
 }
 
+async function deletePrefixLocal(prefix: string): Promise<number> {
+  // Lokalde prefix = klasör (`runs/<id>/`). Yoksa sessiz geçer (force).
+  await rm(path.join(UPLOADS_DIR, prefix), { recursive: true, force: true });
+  return 0; // lokal sürücüde sayım tutulmaz — çağıran yalnızca Spaces'te anlamlı sayar.
+}
+
 // ── S3 (Spaces) sürücüsü ──────────────────────────────────────────────────────
 // Spaces yanıt vermezse pipeline adımı sonsuza kadar beklemesin — AWS SDK abortSignal ile
 // isteği GERÇEKTEN iptal eder (soket kapanır, sızıntı olmaz).
@@ -94,6 +106,34 @@ async function putSpaces(cfg: SpacesConfig, key: string, body: Buffer, contentTy
     { abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS) },
   );
   return `${cfg.publicBase}/${key}`;
+}
+
+/**
+ * Bir prefix altındaki TÜM nesneleri siler. Liste sayfalanır (>1000 nesne), silme 1000'lik
+ * gruplar hâlinde yapılır (DeleteObjects tek çağrıda en fazla 1000 anahtar kabul eder).
+ */
+async function deletePrefixSpaces(cfg: SpacesConfig, prefix: string): Promise<number> {
+  let deleted = 0;
+  let token: string | undefined;
+  do {
+    const listed = await cfg.client.send(
+      new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix, ContinuationToken: token }),
+      { abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS) },
+    );
+    const keys = (listed.Contents ?? []).map((o) => o.Key).filter((k): k is string => Boolean(k));
+    if (keys.length > 0) {
+      await cfg.client.send(
+        new DeleteObjectsCommand({
+          Bucket: cfg.bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+        { abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS) },
+      );
+      deleted += keys.length;
+    }
+    token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (token);
+  return deleted;
 }
 
 async function readSpaces(cfg: SpacesConfig, key: string): Promise<Buffer> {
@@ -148,4 +188,16 @@ export function keyFromUrl(url: string): string {
   if (idx >= 0) return url.slice(idx + '/uploads/'.length);
   // 4) Zaten ham key ise olduğu gibi bırak.
   return url;
+}
+
+/**
+ * Bir prefix altındaki her şeyi siler (örn. `runs/<id>/` → o run'ın master'ı, JPG'leri,
+ * mockup'ları, videosu). GERİ DÖNÜŞÜ YOKTUR; yalnızca kullanıcı onaylı temizlik akışında çağrılır.
+ * Dönen sayı Spaces'te silinen nesne adedidir (lokal sürücüde 0).
+ */
+export async function deletePrefix(prefix: string): Promise<number> {
+  const p = safeKey(prefix);
+  if (!p) return 0; // boş prefix TÜM bucket'ı silerdi — kesinlikle engelle.
+  const cfg = spaces();
+  return cfg ? deletePrefixSpaces(cfg, p) : deletePrefixLocal(p);
 }

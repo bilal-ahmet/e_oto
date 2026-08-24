@@ -5,7 +5,7 @@
  * updated_at: her UPDATE'te `updatedAt: new Date()` manuel eklenir.
  */
 
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import { db, pgPool } from './index';
 import {
   appSettings,
@@ -273,13 +273,56 @@ export async function getPipelineRun(id: string): Promise<PipelineRun | null> {
   return row ? rowToPipelineRun(row) : null;
 }
 
-export async function listPipelineRuns(limit = 50): Promise<PipelineRun[]> {
+export async function listPipelineRuns(limit = 50, offset = 0): Promise<PipelineRun[]> {
   const rows = await db
     .select()
     .from(pipelineRuns)
     .orderBy(desc(pipelineRuns.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
   return rows.map(rowToPipelineRun);
+}
+
+/** Toplam run sayısı — panelde sayfalama (kaç sayfa var?) için. */
+export async function countPipelineRuns(): Promise<number> {
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(pipelineRuns);
+  return row?.n ?? 0;
+}
+
+/**
+ * Durum başına run sayısı — panel istatistik kartları için.
+ *
+ * NEDEN AYRI SORGU: kartlar eskiden ekrandaki listeden hesaplanıyordu; sayfalama gelince
+ * "o sayfadaki 30 kayıt" üzerinden sayılıp yanlış rakam gösterirdi. Sayım DB'de, TÜM kayıtlar
+ * üzerinde yapılır.
+ */
+export async function pipelineRunStatusCounts(): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ status: pipelineRuns.status, n: sql<number>`count(*)::int` })
+    .from(pipelineRuns)
+    .groupBy(pipelineRuns.status);
+  return Object.fromEntries(rows.map((r) => [r.status as string, r.n]));
+}
+
+/**
+ * TÜM pipeline run kayıtlarını siler ve silinen id'leri döner (çağıran, depodaki
+ * `runs/<id>/` dosyalarını bu id'lerle temizler).
+ *
+ * competitor_research.pipeline_run_id gerçek bir FK olduğundan önce o bağ koparılır —
+ * aksi halde DELETE foreign key ihlaliyle patlar. Rakip analizi kayıtları KORUNUR
+ * (araştırma verisi run'dan bağımsız değerlidir), yalnızca run'a işaret eden alan boşaltılır.
+ *
+ * GERİ DÖNÜŞÜ YOKTUR — yalnızca kullanıcı onaylı temizlik akışında çağrılır.
+ */
+export async function deleteAllPipelineRuns(): Promise<string[]> {
+  return db.transaction(async (tx) => {
+    await tx
+      .update(competitorResearch)
+      .set({ pipelineRunId: null })
+      .where(isNotNull(competitorResearch.pipelineRunId));
+    const rows = await tx.delete(pipelineRuns).returning({ id: pipelineRuns.id });
+    return rows.map((r) => r.id);
+  });
 }
 
 /** Transient (askıda kalabilecek) durumlar — kurtarma sweeper bunları izler. */

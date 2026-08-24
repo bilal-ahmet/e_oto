@@ -1,12 +1,22 @@
 import Link from 'next/link';
 import { Card, PageHeader } from '@/components/ui';
 import { StatusBadge } from '@/components/StatusBadge';
+import { ClearRunsButton } from '@/components/ClearRunsButton';
 import { EtsyConnection } from '@/components/EtsyConnection';
 import { PinterestConnection } from '@/components/PinterestConnection';
-import { listCompetitorListings, listCompetitorShops, listPipelineRuns } from '@/lib/db/queries';
+import {
+  countPipelineRuns,
+  listCompetitorListings,
+  listCompetitorShops,
+  listPipelineRuns,
+  pipelineRunStatusCounts,
+} from '@/lib/db/queries';
+import { STATUS_META } from '@/lib/status';
 
 // Her istekte taze veri (DB'den).
 export const dynamic = 'force-dynamic';
+
+const PAGE_SIZE = 30;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('tr-TR', {
@@ -22,19 +32,34 @@ export default async function DashboardPage({
 }: {
   // OAuth callback'leri buraya `?etsy=...` veya `?pinterest=...` (+ hata durumunda
   // `&reason=...`) ile döner. `reason` iki sağlayıcı arasında paylaşılır; hangisi hata
-  // döndüyse yalnızca ona verilir.
-  searchParams: Promise<{ etsy?: string; pinterest?: string; reason?: string }>;
+  // döndüyse yalnızca ona verilir. `p` = çalıştırma listesi sayfa numarası (1'den başlar).
+  searchParams: Promise<{ etsy?: string; pinterest?: string; reason?: string; p?: string }>;
 }) {
-  const { etsy, pinterest, reason } = await searchParams;
-  const [runs, listings, shops] = await Promise.all([
-    listPipelineRuns(50),
+  const { etsy, pinterest, reason, p } = await searchParams;
+
+  const total = await countPipelineRuns();
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Sayfa numarası kullanıcıdan gelir → aralığa sıkıştır (elle yazılan `?p=999` boş liste vermesin).
+  const page = Math.min(Math.max(Number(p) || 1, 1), pageCount);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const [runs, counts, listings, shops] = await Promise.all([
+    listPipelineRuns(PAGE_SIZE, offset),
+    pipelineRunStatusCounts(),
     listCompetitorListings(),
     listCompetitorShops(),
   ]);
 
-  const awaiting = runs.filter((r) => r.status === 'awaiting_approval').length;
-  const done = runs.filter((r) => r.status === 'done').length;
-  const errored = runs.filter((r) => r.status === 'error').length;
+  // Sayaçlar TÜM kayıtlar üzerinden (ekrandaki sayfadan değil — yoksa sayfa değişince rakam değişirdi).
+  const n = (s: string) => counts[s] ?? 0;
+  const awaiting = n('awaiting_approval') + n('awaiting_seo_approval') + n('awaiting_publish');
+  const working =
+    n('queued') +
+    n('generating_image') +
+    n('generating_seo') +
+    n('processing_files') +
+    n('publishing_etsy') +
+    n('publishing_pinterest');
 
   const shopName = (id: number) => shops.find((s) => s.shopId === id)?.shopName ?? `#${id}`;
   const topCompetitors = [...listings]
@@ -42,10 +67,10 @@ export default async function DashboardPage({
     .slice(0, 5);
 
   const stats = [
-    { label: 'Toplam çalıştırma', value: runs.length },
+    { label: 'Toplam çalıştırma', value: total },
     { label: 'Onay bekleyen', value: awaiting },
-    { label: 'Tamamlanan', value: done },
-    { label: 'Hatalı', value: errored },
+    { label: 'Yayınlanan', value: n('done') },
+    { label: 'Hatalı', value: n('error') },
   ];
 
   return (
@@ -77,31 +102,75 @@ export default async function DashboardPage({
 
       <div className="mt-8 grid gap-6 lg:grid-cols-5">
         <section className="lg:col-span-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900">Son çalıştırmalar</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900">Son çalıştırmalar</h2>
+              <p className="text-xs text-zinc-400">
+                Sadece bilgi amaçlı liste — işlem yapmak için üretim ekranını kullan.
+              </p>
+            </div>
             <Link href="/admin/generate" className="text-sm font-medium text-rose-600 hover:text-rose-700">
               Yeni üretim →
             </Link>
           </div>
+
           <Card className="p-0">
             {runs.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-zinc-400">Henüz çalıştırma yok.</p>
             ) : (
-              <ul className="divide-y divide-zinc-100">
-                {runs.map((run) => (
-                  <li key={run.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-zinc-900">{run.prompt}</p>
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        {run.id.slice(0, 8)} · {formatDate(run.updatedAt)}
-                      </p>
-                    </div>
-                    <StatusBadge status={run.status} />
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="divide-y divide-zinc-100">
+                  {runs.map((run) => {
+                    const meta = STATUS_META[run.status];
+                    // Hata durumunda jenerik açıklama yerine gerçek sebebi göster — asıl bilgi odur.
+                    const note =
+                      run.status === 'error' && run.errorMessage ? run.errorMessage : meta.description;
+                    const noteClass =
+                      run.status === 'error'
+                        ? 'text-red-600'
+                        : meta.kind === 'waiting'
+                          ? 'text-amber-700'
+                          : 'text-zinc-500';
+                    return (
+                      <li key={run.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-zinc-900">{run.prompt}</p>
+                          <p className={`mt-1 text-xs ${noteClass}`}>{note}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <StatusBadge status={run.status} />
+                          <p className="mt-1 text-xs text-zinc-400">
+                            {formatDate(run.updatedAt)} · {run.id.slice(0, 8)}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
+                  <span className="text-xs text-zinc-400">
+                    {offset + 1}–{offset + runs.length} / {total} kayıt
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <PageLink href={`/admin?p=${page - 1}`} disabled={page <= 1}>
+                      ← Önceki
+                    </PageLink>
+                    <span className="px-2 text-xs text-zinc-500">
+                      {page} / {pageCount}
+                    </span>
+                    <PageLink href={`/admin?p=${page + 1}`} disabled={page >= pageCount}>
+                      Sonraki →
+                    </PageLink>
+                  </div>
+                </div>
+              </>
             )}
           </Card>
+
+          <div className="mt-3 flex justify-end">
+            <ClearRunsButton total={total} active={working + awaiting} />
+          </div>
         </section>
 
         <section className="lg:col-span-2">
@@ -138,5 +207,26 @@ export default async function DashboardPage({
         </section>
       </div>
     </div>
+  );
+}
+
+/** Sayfalama oku — sınırdayken tıklanamaz (link yerine düz metin) olur. */
+function PageLink({
+  href,
+  disabled,
+  children,
+}: {
+  href: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const base = 'rounded-md px-2.5 py-1 text-xs font-medium';
+  if (disabled) {
+    return <span className={`${base} text-zinc-300`}>{children}</span>;
+  }
+  return (
+    <Link href={href} className={`${base} text-zinc-600 transition-colors hover:bg-zinc-100`}>
+      {children}
+    </Link>
   );
 }
