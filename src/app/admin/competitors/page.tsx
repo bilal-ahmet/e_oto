@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CompetitorListing, CompetitorShop } from '@/types';
-import { Button, Card, PageHeader, Spinner } from '@/components/ui';
+import { Alert, Button, Card, EmptyState, Input, PageHeader, Select, Spinner } from '@/components/ui';
 
 type SortKey = keyof Pick<
   CompetitorListing,
@@ -120,27 +120,27 @@ export default function CompetitorsPage() {
       />
 
       {error ? (
-        <Card className="mb-4 border-red-200 bg-red-50">
-          <p className="text-sm text-red-700">{error}</p>
-        </Card>
+        <Alert tone="danger" className="mb-4">
+          {error}
+        </Alert>
       ) : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <input
+        <Input
           value={scanInput}
           onChange={(e) => setScanInput(e.target.value)}
           placeholder="Mağaza adı veya shop ID"
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+          className="w-64"
         />
         <Button variant="secondary" onClick={runScan} disabled={scanning || !scanInput.trim()}>
           {scanning ? <Spinner /> : null}
           {scanning ? 'Taranıyor…' : 'Taramayı çalıştır'}
         </Button>
 
-        <select
+        <Select
           value={shopFilter}
           onChange={(e) => setShopFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+          className="w-64"
         >
           <option value="all">Tüm mağazalar</option>
           {shops.map((s) => (
@@ -148,23 +148,27 @@ export default function CompetitorsPage() {
               {s.shopName}
             </option>
           ))}
-        </select>
-        <span className="text-sm text-zinc-500">{rows.length} ürün</span>
+        </Select>
+        <span className="font-mono text-label uppercase tracking-label tabular-nums text-ink-faint">
+          {rows.length} ürün
+        </span>
       </div>
 
       <Card padded={false} className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
+            <tr className="border-b border-sand bg-shade text-left font-mono text-label uppercase tracking-label text-ink-muted">
               <th className="px-5 py-3 font-medium">Ürün</th>
               {COLUMNS.map((col) => (
                 <th key={col.key} className="px-4 py-3 font-medium">
                   <button
                     onClick={() => toggleSort(col.key)}
-                    className="inline-flex items-center gap-1 hover:text-zinc-900"
+                    className="inline-flex items-center gap-1 transition-colors hover:text-ink"
                   >
                     {col.label}
-                    <span className="text-zinc-400">
+                    {/* Aktif sıralama kolonu altın, pasifler kum — hangisine göre
+                        sıralandığı okun rengiyle de okunuyor, sadece şekliyle değil. */}
+                    <span className={sortKey === col.key ? 'text-gold-deep' : 'text-sand'}>
                       {sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
                     </span>
                   </button>
@@ -172,33 +176,38 @@ export default function CompetitorsPage() {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-sand-soft">
             {loading ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="px-5 py-8 text-center text-zinc-400">
-                  <Spinner className="text-rose-600" /> Yükleniyor…
+                <td colSpan={COLUMNS.length + 1} className="px-5 py-8 text-center text-ink-faint">
+                  <Spinner className="text-gold-deep" /> Yükleniyor…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="px-5 py-8 text-center text-zinc-400">
-                  Henüz tarama yok. Yukarıdan bir mağaza adı/ID girip taramayı çalıştır.
+                <td colSpan={COLUMNS.length + 1} className="p-0">
+                  <EmptyState
+                    title="Henüz tarama yok"
+                    description="Yukarıdan bir mağaza adı veya shop ID girip taramayı çalıştır."
+                  />
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.listingId} className="hover:bg-zinc-50">
+                <tr key={row.listingId} className="transition-colors hover:bg-shade/60">
                   <td className="max-w-xs px-5 py-3">
-                    <p className="truncate font-medium text-zinc-900">{row.title}</p>
-                    <p className="mt-0.5 text-xs text-zinc-400">{shopName(row.shopId)}</p>
+                    <p className="truncate font-medium text-ink">{row.title}</p>
+                    <p className="mt-0.5 font-mono text-label uppercase tracking-label text-ink-faint">
+                      {shopName(row.shopId)}
+                    </p>
                   </td>
                   {COLUMNS.map((col) => (
                     <td
                       key={col.key}
                       className={`px-4 py-3 tabular-nums ${
                         col.key === 'opportunityScore'
-                          ? 'font-semibold text-green-700'
-                          : 'text-zinc-700'
+                          ? 'border-l-2 border-gold font-semibold text-ink'
+                          : 'text-ink-body'
                       }`}
                     >
                       {col.format(row[col.key])}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ImageDraft } from '@/types';
-import { Button, Card, PageHeader, Spinner } from '@/components/ui';
+import { Alert, Button, EmptyState, FRAMED_IMG, Framed, PageHeader, Spinner, buttonClasses } from '@/components/ui';
 
 /**
  * Dosyayı base64'e çevirir. FileReader kullanılır — elle byte döngüsü büyük görsellerde ana
@@ -105,15 +105,19 @@ export default function DraftsPage() {
       />
 
       {error ? (
-        <Card className="mb-6 border-red-200 bg-red-50">
-          <p className="text-sm text-red-700">{error}</p>
-        </Card>
+        <Alert tone="danger" className="mb-6">
+          {error}
+        </Alert>
       ) : null}
 
-      <Card>
+      {/* Galeri bandı — marka sitesindeki galeri şeridiyle aynı okuma: kâğıt zeminden
+          bir ton koyu, kapsayıcının kenarına kadar uzanan bir bant. */}
+      <div className="-mx-4 border-y border-sand bg-shade px-4 py-6 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-zinc-500">{drafts.length} taslak</p>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-700 ring-1 ring-inset ring-zinc-300 transition-colors hover:bg-zinc-50">
+          <p className="font-mono text-label uppercase tracking-label tabular-nums text-ink-muted">
+            {drafts.length} taslak
+          </p>
+          <label className={`${buttonClasses({ variant: 'ghost', size: 'sm' })} cursor-pointer`}>
             {busy ? <Spinner /> : null}
             Görsel yükle
             <input
@@ -131,44 +135,53 @@ export default function DraftsPage() {
         </div>
 
         {drafts.length === 0 ? (
-          <p className="mt-6 text-center text-sm text-zinc-400">Henüz taslak yok.</p>
+          <EmptyState
+            title="Henüz taslak yok"
+            description="Beğendiğin bir varyasyonu kaydet ya da dışarıdan bir görsel yükle."
+          />
         ) : (
-          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
             {drafts.map((d) => (
-              <div
-                key={d.id}
-                className="group relative overflow-hidden rounded-lg ring-1 ring-zinc-200"
-              >
-                <Image
-                  src={d.imageUrl}
-                  alt="Taslak"
-                  width={300}
-                  height={400}
-                  unoptimized
-                  className="aspect-[3/4] w-full object-cover"
-                />
-                <button
-                  onClick={() => deleteDraft(d.id)}
-                  disabled={busy}
-                  title="Taslağı sil"
-                  className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-md bg-white/90 text-sm font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200 transition hover:bg-white hover:text-red-600 disabled:opacity-60"
-                >
-                  ×
-                </button>
-                <div className="absolute inset-x-0 bottom-0 p-1.5">
-                  <Button
-                    onClick={() => continueWithDraft(d.id)}
+              <div key={d.id}>
+                <div className="relative">
+                  <Framed>
+                    {/* object-contain (FRAMED_IMG) — taslak kaydında ürün tipi tutulmadığı
+                        için 16:9 bir Frame TV eseri eskiden 3:4 kutuda KIRPILIYORDU.
+                        Paspartuda artan boşluk doğal görünür, eser bozulmaz. */}
+                    <Image
+                      src={d.imageUrl}
+                      alt="Taslak"
+                      width={300}
+                      height={400}
+                      unoptimized
+                      className={FRAMED_IMG}
+                    />
+                  </Framed>
+                  {/* Sil düğmesi eserin değil, PASPARTUNUN üstünde durur. */}
+                  <button
+                    onClick={() => deleteDraft(d.id)}
                     disabled={busy}
-                    className="w-full !px-2 !py-1.5 text-xs"
+                    title="Taslağı sil"
+                    aria-label="Taslağı sil"
+                    className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-paper text-sm font-semibold text-ink-muted transition-colors hover:text-state-error-ink disabled:opacity-60"
                   >
-                    Bu taslakla devam et
-                  </Button>
+                    ×
+                  </button>
                 </div>
+                {/* Eylem mat'ın DIŞINDA: hover'da eserin üstünü kapatmıyor. */}
+                <Button
+                  onClick={() => continueWithDraft(d.id)}
+                  disabled={busy}
+                  size="sm"
+                  className="mt-2 w-full"
+                >
+                  Bu taslakla devam et
+                </Button>
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }
