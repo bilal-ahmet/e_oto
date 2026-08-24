@@ -5,7 +5,6 @@ import { ClearRunsButton } from '@/components/ClearRunsButton';
 import { EtsyConnection } from '@/components/EtsyConnection';
 import { PinterestConnection } from '@/components/PinterestConnection';
 import {
-  countPipelineRuns,
   listCompetitorListings,
   listCompetitorShops,
   listPipelineRuns,
@@ -16,7 +15,7 @@ import { STATUS_META } from '@/lib/status';
 // Her istekte taze veri (DB'den).
 export const dynamic = 'force-dynamic';
 
-// Sayfa başına kayıt. Toplamda sınır YOK — sayfalama tüm geçmişi kapsar (bkz. countPipelineRuns).
+// Sayfa başına kayıt. Toplamda sınır YOK — sayfalama tüm geçmişi kapsar.
 const PAGE_SIZE = 10;
 
 /**
@@ -61,16 +60,20 @@ export default async function DashboardPage({
 }) {
   const { etsy, pinterest, reason, p } = await searchParams;
 
-  const total = await countPipelineRuns();
+  // Tek sayım sorgusu: toplam, durum sayaçlarının toplamıdır — ayrıca COUNT(*) atmaya gerek yok.
+  const counts = await pipelineRunStatusCounts();
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   // Sayfa numarası kullanıcıdan gelir → aralığa sıkıştır (elle yazılan `?p=999` boş liste vermesin).
   const page = Math.min(Math.max(Number(p) || 1, 1), pageCount);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [runs, counts, listings, shops] = await Promise.all([
+  const [runs, listings, shops] = await Promise.all([
     listPipelineRuns(PAGE_SIZE, offset),
-    pipelineRunStatusCounts(),
-    listCompetitorListings(),
+    // Yalnızca ilk 5 gösteriliyor → sınırı SQL'e ver. Sorgu zaten opportunity_score DESC sıralı
+    // döndüğü için burada tekrar sıralamaya da gerek yok.
+    listCompetitorListings(undefined, 5),
     listCompetitorShops(),
   ]);
 
@@ -86,9 +89,7 @@ export default async function DashboardPage({
     n('publishing_pinterest');
 
   const shopName = (id: number) => shops.find((s) => s.shopId === id)?.shopName ?? `#${id}`;
-  const topCompetitors = [...listings]
-    .sort((a, b) => b.opportunityScore - a.opportunityScore)
-    .slice(0, 5);
+  const topCompetitors = listings; // SQL zaten skora göre sıralı ve 5'le sınırlı
 
   const stats = [
     { label: 'Toplam çalıştırma', value: total },

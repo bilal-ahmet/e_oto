@@ -318,15 +318,19 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
 
       try {
-        const results = await generateAllMockups(mockupSource, cfg.mockupScenes);
-        const mockups: string[] = [];
-        for (const r of results) {
+        // Her mockup üretildiği anda depoya yazılır (buffer'lar birikmesin — bkz. generateAllMockups).
+        // Sahneler paralel bittiği için sıra garanti değil; bu yüzden index'e göre yerleştirilir.
+        const mockups: string[] = cfg.mockupScenes.map(() => '');
+        await generateAllMockups(mockupSource, cfg.mockupScenes, async (r) => {
           if (r.ok && r.buffer) {
-            mockups.push(await putObject(`runs/${runId}/mockup-${r.index}.jpg`, r.buffer, r.contentType ?? 'image/jpeg'));
-          } else {
-            mockups.push(''); // boş slot — gate 3'te yeniden üretilebilir
+            mockups[r.index] = await putObject(
+              `runs/${runId}/mockup-${r.index}.jpg`,
+              r.buffer,
+              r.contentType ?? 'image/jpeg',
+            );
           }
-        }
+          // Başarısız sahne '' kalır — boş slot, gate 3'te yeniden üretilebilir.
+        });
         media.mockups = mockups;
       } catch (e) {
         console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);

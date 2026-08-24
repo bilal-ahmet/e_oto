@@ -42,5 +42,11 @@ COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
+# Ayrıcalık düşürme — imaj varsayılan olarak root çalışıyordu. node:22 imajında hazır gelen
+# `node` kullanıcısı kullanılır. Uygulama imaj içine YAZMAZ (yüklemeler Spaces'e gider), bu
+# yüzden salt-okunur sahiplik yeterli; lokal disk sürücüsü yalnızca geliştirme içindir.
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 3000
 CMD ["npm", "run", "start"]

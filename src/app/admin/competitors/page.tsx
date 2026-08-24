@@ -43,9 +43,30 @@ export default function CompetitorsPage() {
     }
   }, []);
 
+  // İlk yükleme. `load()`u ÇAĞIRMAZ: o, ilk satırında setLoading(true) yapıyor ve effect
+  // gövdesinde senkron setState cascade render'a yol açıyor (react-hooks/set-state-in-effect).
+  // Burada `loading` zaten true başlıyor; tüm setState'ler await'ten SONRA çalışır.
+  // `active` bayrağı: istek dönmeden bileşen sökülürse state yazılmaz.
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/competitors');
+        if (!res.ok || !active) return;
+        const data: { shops: CompetitorShop[]; listings: CompetitorListing[] } = await res.json();
+        if (!active) return;
+        setShops(data.shops);
+        setListings(data.listings);
+      } catch {
+        /* sessiz geç — hata durumunda liste boş kalır */
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const shopName = useCallback(
     (id: number) => shops.find((s) => s.shopId === id)?.shopName ?? `#${id}`,

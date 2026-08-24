@@ -80,7 +80,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Rakip analizi başarısız.';
     // Etsy 404 (silinmiş/private) dahil hata mesajını ilet.
-    const status = /\b404\b/.test(message) ? 404 : 502;
+    // 502 DEĞİL: DigitalOcean/Cloudflare origin 502'sini kendi HTML sayfasıyla değiştirir, JSON
+    // gövde kaybolur ve panel "Unexpected token '<'" verir (CLAUDE.md kural 4). 424 = "bağımlı
+    // olduğumuz servis (Etsy/Claude) başarısız" — komşu competitors/scan ucuyla aynı desen.
+    const status = /\b404\b/.test(message) ? 404 : 424;
     return NextResponse.json({ error: message }, { status });
   }
 }

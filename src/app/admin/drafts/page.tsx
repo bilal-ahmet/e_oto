@@ -6,12 +6,23 @@ import { useRouter } from 'next/navigation';
 import type { ImageDraft } from '@/types';
 import { Button, Card, PageHeader, Spinner } from '@/components/ui';
 
-async function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
-  const buf = await file.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return { base64: btoa(binary), mediaType: file.type || 'image/png' };
+/**
+ * Dosyayı base64'e çevirir. FileReader kullanılır — elle byte döngüsü büyük görsellerde ana
+ * iş parçacığını saniyelerce kilitliyordu (bkz. admin/generate/page.tsx'teki aynı yardımcı).
+ */
+function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve({
+        base64: result.slice(result.indexOf(',') + 1),
+        mediaType: file.type || 'image/png',
+      });
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function DraftsPage() {

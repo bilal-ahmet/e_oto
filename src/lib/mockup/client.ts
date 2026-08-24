@@ -54,18 +54,38 @@ export interface MockupResult {
 /**
  * Verilen sahnelerin tamamını üretir. Master bir kez fal storage'a yüklenir, tüm sahnelerde kullanılır.
  * Hatalı sahneler atlanır (ok=false) — biri patlarsa diğerleri devam eder.
+ *
+ * BELLEK: sahneler paralel üretilir (iş fal tarafında, ağ beklemesi — paralellik bedava) ama
+ * çıktı buffer'ları BİRİKTİRİLMEZ. `onResult` her sahne biter bitmez çağrılır; çağıran orada
+ * depoya yazıp buffer'ı bırakır, böylece 8 JPG aynı anda bellekte durmaz. Dönen sonuç listesi
+ * buffer İÇERMEZ (yalnızca durum bilgisi) — packaging/resize-and-export ile aynı sözleşme.
+ *
  * @param scenes Ürün tipine göre sahne listesi (`productConfig(...).mockupScenes`).
+ * @param onResult Her sahne tamamlandığında (başarılı ya da değil) await edilerek çağrılır.
  */
-export async function generateAllMockups(master: Buffer, scenes: MockupScene[]): Promise<MockupResult[]> {
+export async function generateAllMockups(
+  master: Buffer,
+  scenes: MockupScene[],
+  onResult: (result: MockupResult) => Promise<void>,
+): Promise<MockupResult[]> {
   const masterUrl = await uploadBuffer(master, 'image/png', 'mockup-source.png');
   return Promise.all(
     scenes.map(async (scene, index): Promise<MockupResult> => {
+      let result: MockupResult;
       try {
         const { buffer, contentType } = await generateMockup(masterUrl, scene);
-        return { key: scene.key, index, ok: true, buffer, contentType };
+        result = { key: scene.key, index, ok: true, buffer, contentType };
       } catch (err) {
-        return { key: scene.key, index, ok: false, error: err instanceof Error ? err.message : String(err) };
+        result = {
+          key: scene.key,
+          index,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
+      await onResult(result);
+      // Buffer'ı çıktı listesinden düşür — çağıran onu onResult'ta zaten depoya yazdı.
+      return { ...result, buffer: undefined };
     }),
   );
 }

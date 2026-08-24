@@ -8,6 +8,7 @@
 import pThrottle from 'p-throttle';
 import { getEnv } from '@/lib/env';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
+import { singleFlight } from '@/lib/async/single-flight';
 import { getOAuthToken, upsertOAuthToken } from '@/lib/db/queries';
 import { refreshAccessToken } from './oauth';
 
@@ -34,7 +35,41 @@ export async function persistEtsyTokens(
   await upsertOAuthToken('etsy', accessToken, refreshToken ?? previousRefreshToken, expiresAt);
 }
 
-/** Geçerli (gerekirse yenilenmiş) Etsy access token döner. */
+const REFRESH_KEY = 'etsy:refresh';
+const EXPIRY_BUFFER_MS = 60_000; // 60 sn tampon
+
+/**
+ * Token'ı yeniler ve saklar; yeni access token'ı döner (refresh token yoksa null).
+ *
+ * DAİMA `singleFlight(REFRESH_KEY, ...)` içinden çağrılır — hem `getValidEtsyToken` hem
+ * cron'un çağırdığı `refreshEtsyTokenNow` aynı anahtarı ve AYNI dönüş tipini paylaşsın diye
+ * tek fonksiyona indirildi (farklı tipli iki iş aynı anahtarı paylaşırsa biri diğerinin
+ * sonucunu alır).
+ */
+async function refreshAndStore(force = false): Promise<string | null> {
+  // Kuyrukta beklerken başka bir çağrı yenilemiş olabilir — DB'yi TEKRAR oku.
+  const token = await getOAuthToken('etsy');
+  if (!token?.refreshToken) return null;
+  // `force` cron içindir: amacı süre dolmasa BİLE yenileyip 90 günlük pencereyi sıfırlamak.
+  if (!force && token.expiresAt != null && token.expiresAt.getTime() - Date.now() >= EXPIRY_BUFFER_MS) {
+    return token.accessToken; // başkası zaten tazeledi
+  }
+  const refreshed = await refreshAccessToken(token.refreshToken);
+  await persistEtsyTokens(
+    refreshed.accessToken,
+    refreshed.refreshToken,
+    token.refreshToken,
+    refreshed.expiresAt,
+  );
+  return refreshed.accessToken;
+}
+
+/**
+ * Geçerli (gerekirse yenilenmiş) Etsy access token döner.
+ *
+ * Yenileme `singleFlight` altındadır: eşzamanlı iki çağrı aynı refresh token'ı iki kez
+ * kullanamaz (Etsy her kullanımda token'ı döndürür, ikinci istek ölü token'la gider).
+ */
 export async function getValidEtsyToken(): Promise<string> {
   const token = await getOAuthToken('etsy');
   if (!token) {
@@ -42,17 +77,12 @@ export async function getValidEtsyToken(): Promise<string> {
   }
 
   const expiringSoon =
-    token.expiresAt != null && token.expiresAt.getTime() - Date.now() < 60_000; // 60 sn tampon
+    token.expiresAt != null && token.expiresAt.getTime() - Date.now() < EXPIRY_BUFFER_MS;
 
   if (expiringSoon && token.refreshToken) {
-    const refreshed = await refreshAccessToken(token.refreshToken);
-    await persistEtsyTokens(
-      refreshed.accessToken,
-      refreshed.refreshToken,
-      token.refreshToken,
-      refreshed.expiresAt,
-    );
-    return refreshed.accessToken;
+    const access = await singleFlight(REFRESH_KEY, refreshAndStore);
+    if (!access) throw new Error('Etsy refresh token yok — yeniden yetkilendirme gerekiyor.');
+    return access;
   }
 
   return token.accessToken;
@@ -69,16 +99,11 @@ export async function getValidEtsyToken(): Promise<string> {
  * @returns Yenileme yapıldıysa true; token yoksa/refresh_token yoksa false.
  */
 export async function refreshEtsyTokenNow(): Promise<boolean> {
-  const token = await getOAuthToken('etsy');
-  if (!token?.refreshToken) return false;
-  const refreshed = await refreshAccessToken(token.refreshToken);
-  await persistEtsyTokens(
-    refreshed.accessToken,
-    refreshed.refreshToken,
-    token.refreshToken,
-    refreshed.expiresAt,
-  );
-  return true;
+  // getValidEtsyToken ile AYNI anahtar: cron yenilemesi bir yayın adımının yenilemesiyle çakışamaz.
+  // Çakışma anında devam eden (force'suz) yenilemeye katılıp sonucunu paylaşabilir; token yine
+  // tazelenmiş olur ve cron ertesi gün yaşı yeniden değerlendirir.
+  const access = await singleFlight(REFRESH_KEY, () => refreshAndStore(true));
+  return access !== null;
 }
 
 interface EtsyFetchOptions {

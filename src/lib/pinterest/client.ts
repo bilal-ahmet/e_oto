@@ -8,6 +8,7 @@
 import pThrottle from 'p-throttle';
 import { getOAuthToken, setSetting, upsertOAuthToken } from '@/lib/db/queries';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
+import { singleFlight } from '@/lib/async/single-flight';
 import { refreshAccessToken } from './oauth';
 import { apiBase, apiEnv } from './hosts';
 
@@ -36,7 +37,31 @@ async function persistTokens(
   await setSetting('pinterest_token_env', apiEnv());
 }
 
-/** Geçerli (gerekirse yenilenmiş) Pinterest access token döner. */
+const REFRESH_KEY = 'pinterest:refresh';
+
+/**
+ * Token'ı yeniler ve saklar; yeni access token'ı döner (refresh token yoksa null).
+ * DAİMA `singleFlight(REFRESH_KEY, ...)` içinden çağrılır — bkz. lib/async/single-flight.
+ * `force` cron içindir: süre dolmasa bile yenileyip 60 günlük pencereyi sıfırlar.
+ */
+async function refreshAndStore(force = false): Promise<string | null> {
+  // Kuyrukta beklerken başka bir çağrı yenilemiş olabilir — DB'yi TEKRAR oku.
+  const token = await getOAuthToken('pinterest');
+  if (!token?.refreshToken) return null;
+  if (!force && token.expiresAt != null && token.expiresAt.getTime() - Date.now() >= EXPIRY_BUFFER_MS) {
+    return token.accessToken; // başkası zaten tazeledi
+  }
+  const refreshed = await refreshAccessToken(token.refreshToken);
+  await persistTokens(refreshed.accessToken, refreshed.refreshToken, token.refreshToken, refreshed.expiresAt);
+  return refreshed.accessToken;
+}
+
+/**
+ * Geçerli (gerekirse yenilenmiş) Pinterest access token döner.
+ *
+ * Yenileme `singleFlight` altındadır: Pinterest de refresh token'ı her kullanımda döndürdüğü
+ * için eşzamanlı iki yenileme ikincisini ölü token'la bırakır.
+ */
 export async function getValidPinterestToken(): Promise<string> {
   const token = await getOAuthToken('pinterest');
   if (!token) {
@@ -47,9 +72,9 @@ export async function getValidPinterestToken(): Promise<string> {
     token.expiresAt != null && token.expiresAt.getTime() - Date.now() < EXPIRY_BUFFER_MS;
 
   if (expiringSoon && token.refreshToken) {
-    const refreshed = await refreshAccessToken(token.refreshToken);
-    await persistTokens(refreshed.accessToken, refreshed.refreshToken, token.refreshToken, refreshed.expiresAt);
-    return refreshed.accessToken;
+    const access = await singleFlight(REFRESH_KEY, refreshAndStore);
+    if (!access) throw new Error('Pinterest refresh token yok — yeniden yetkilendirme gerekiyor.');
+    return access;
   }
 
   return token.accessToken;
@@ -60,12 +85,10 @@ export async function getValidPinterestToken(): Promise<string> {
  * Amaç 60 günlük refresh penceresinin hiç dolmaması — bkz. oauth.refreshAccessToken.
  */
 export async function refreshPinterestTokenNow(): Promise<void> {
-  const token = await getOAuthToken('pinterest');
-  if (!token?.refreshToken) {
+  const access = await singleFlight(REFRESH_KEY, () => refreshAndStore(true));
+  if (!access) {
     throw new Error('Pinterest refresh token yok — yeniden yetkilendirme gerekiyor.');
   }
-  const refreshed = await refreshAccessToken(token.refreshToken);
-  await persistTokens(refreshed.accessToken, refreshed.refreshToken, token.refreshToken, refreshed.expiresAt);
 }
 
 interface PinterestFetchOptions {

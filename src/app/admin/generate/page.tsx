@@ -89,12 +89,27 @@ const WORKING: PipelineStatus[] = [
   'publishing_pinterest',
 ];
 
-async function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
-  const buf = await file.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return { base64: btoa(binary), mediaType: file.type || 'image/png' };
+/**
+ * Dosyayı base64'e çevirir.
+ *
+ * FileReader KULLANILIR (elle byte döngüsü DEĞİL): eski hâli her byte için string birleştirme
+ * yapıyordu ve 10 MB'lık bir görselde ana iş parçacığını saniyelerce kilitliyordu (sekme donuyor).
+ * readAsDataURL aynı işi native tarafta yapar; sonuç "data:<mime>;base64,<veri>" olduğu için
+ * yalnızca virgülden sonrası alınır.
+ */
+function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve({
+        base64: result.slice(result.indexOf(',') + 1),
+        mediaType: file.type || 'image/png',
+      });
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -1100,8 +1115,9 @@ function PublishReview({
       <h2 className="text-lg font-semibold text-zinc-900">Yayın onayı</h2>
       <p className="mt-1 text-sm text-zinc-500">
         Onaylayınca Etsy taslak listing&apos;i oluşturulur: {imageCount} görsel
-        {run.mediaUrls?.video ? ' + 1 video' : ''} + {files.length} JPG yüklenir, öznitelikler yazılır ve
-        listing <strong>aktif</strong> edilir. <strong>Thumbnail</strong> seçtiğin mockup olur.
+        {run.mediaUrls?.video ? ' + 1 video' : ''} + {files.length} JPG yüklenir ve öznitelikler yazılır.{' '}
+        <strong>Thumbnail</strong> seçtiğin mockup olur. İlan <strong>taslak</strong> kalır — son kontrolü
+        yapıp Etsy panelinden kendin yayına alırsın.
       </p>
 
       <PipelineWarnings run={run} />
@@ -1292,8 +1308,32 @@ function DoneView({
     <Card>
       <div className="flex items-center gap-2 text-green-700">
         <span className="grid size-7 place-items-center rounded-full bg-green-100 text-sm">✓</span>
-        <h2 className="text-lg font-semibold">Yayınlandı</h2>
+        <h2 className="text-lg font-semibold">Etsy&apos;ye aktarıldı</h2>
       </div>
+
+      {/*
+        Hat listing'i BİLEREK taslak bırakır (lib/pipeline/run.ts — activateListing çağrılmaz).
+        Bu uyarı olmadan kullanıcı ilanın canlı olduğunu sanıyordu; üstelik taslak bir ilana
+        Pinterest pini atmak ölü link üretiyor. Sıradaki adım açıkça söylenir.
+      */}
+      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <p className="text-sm font-medium text-amber-900">İlan taslak durumda — henüz satışta değil.</p>
+        <p className="mt-1 text-sm text-amber-800">
+          Son kontrolü yapıp Etsy panelinden yayına alman gerekiyor. Pinterest pinini de{' '}
+          <strong>ilan yayına girdikten sonra</strong> at; taslak ilanın linki çalışmaz.
+        </p>
+        {run.etsyListingId ? (
+          <a
+            href={`https://www.etsy.com/your/shops/me/tools/listings/${run.etsyListingId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-sm font-medium text-amber-900 underline hover:text-amber-950"
+          >
+            İlanı Etsy&apos;de aç →
+          </a>
+        ) : null}
+      </div>
+
       <PipelineWarnings run={run} />
       <dl className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-lg bg-zinc-50 px-4 py-3">

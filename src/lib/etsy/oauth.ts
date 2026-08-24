@@ -8,6 +8,7 @@
 
 import { createHash, randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
+import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 
 const CONNECT_URL = 'https://www.etsy.com/oauth/connect';
 const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
@@ -73,12 +74,23 @@ interface TokenResponse {
   token_type: string;
 }
 
+/**
+ * ZAMAN AŞIMI ŞART: bu çağrı asılırsa `getValidEtsyToken` asılır, o da `publishToEtsy`'yi
+ * asar. Kötüsü şu: `withRunLease`'in heartbeat'i `updated_at`'i 60 sn'de bir tazelediğinden
+ * kurtarma sweeper'ı run'ı "askıda" GÖRMEZ ve süreç yeniden başlayana kadar run
+ * `publishing_etsy`'de donar. (Projedeki tek timeout'suz fetch buydu — CLAUDE.md kural 3.)
+ */
 async function postToken(body: Record<string, string>): Promise<EtsyTokens> {
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(body).toString(),
-  });
+  const res = await fetchWithTimeout(
+    TOKEN_URL,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(body).toString(),
+    },
+    TIMEOUTS.etsy,
+    'Etsy token isteği',
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Etsy token isteği başarısız (${res.status}): ${text}`);

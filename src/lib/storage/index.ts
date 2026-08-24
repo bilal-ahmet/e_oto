@@ -17,6 +17,7 @@
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import {
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -200,4 +201,22 @@ export async function deletePrefix(prefix: string): Promise<number> {
   if (!p) return 0; // boş prefix TÜM bucket'ı silerdi — kesinlikle engelle.
   const cfg = spaces();
   return cfg ? deletePrefixSpaces(cfg, p) : deletePrefixLocal(p);
+}
+
+/**
+ * TEK bir nesneyi siler. Yoksa sessizce geçer (iki sürücüde de idempotent).
+ * Kaydı silinen içeriğin dosyası da gitsin diye kullanılır (örn. taslak silme) — aksi hâlde
+ * depoda hiçbir zaman temizlenmeyen yetim dosyalar birikir.
+ */
+export async function deleteObject(key: string): Promise<void> {
+  const k = safeKey(key);
+  if (!k) return;
+  const cfg = spaces();
+  if (!cfg) {
+    await rm(path.join(UPLOADS_DIR, k), { force: true });
+    return;
+  }
+  await cfg.client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: k }), {
+    abortSignal: AbortSignal.timeout(SPACES_TIMEOUT_MS),
+  });
 }

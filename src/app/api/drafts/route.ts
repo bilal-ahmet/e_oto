@@ -10,6 +10,7 @@
 import { randomUUID } from 'crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createImageDraft, listImageDrafts } from '@/lib/db/queries';
+import { bodyErrorStatus, decodeBase64Limited, readJsonBody } from '@/lib/http/body';
 import { keyFromUrl, putObject, readObject } from '@/lib/storage';
 
 const ALLOWED_MEDIA: Record<string, string> = {
@@ -18,6 +19,12 @@ const ALLOWED_MEDIA: Record<string, string> = {
   'image/gif': 'gif',
   'image/webp': 'webp',
 };
+
+/** Uzantıdan MIME tipi (ALLOWED_MEDIA'nın tersi). Bilinmeyen uzantı → png (eski davranış). */
+function contentTypeForExt(ext: string): string {
+  const found = Object.entries(ALLOWED_MEDIA).find(([, e]) => e === (ext === 'jpeg' ? 'jpg' : ext));
+  return found?.[0] ?? 'image/png';
+}
 
 export async function GET() {
   const drafts = await listImageDrafts();
@@ -31,9 +38,10 @@ export async function POST(req: NextRequest) {
     upload?: { base64?: string; mediaType?: string };
   };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Geçersiz JSON gövde.' }, { status: 400 });
+    body = await readJsonBody(req);
+  } catch (e) {
+    const status = bodyErrorStatus(e) ?? 400;
+    return NextResponse.json({ error: (e as Error).message }, { status });
   }
 
   try {
@@ -43,7 +51,7 @@ export async function POST(req: NextRequest) {
       if (!ext) {
         return NextResponse.json({ error: 'Desteklenmeyen görsel tipi.' }, { status: 400 });
       }
-      const buffer = Buffer.from(body.upload.base64, 'base64');
+      const buffer = decodeBase64Limited(body.upload.base64);
       const url = await putObject(`drafts/${randomUUID()}.${ext}`, buffer, body.upload.mediaType);
       const draft = await createImageDraft({ imageUrl: url, source: 'upload' });
       return NextResponse.json({ draft }, { status: 201 });
@@ -54,7 +62,9 @@ export async function POST(req: NextRequest) {
       const srcKey = keyFromUrl(body.variationUrl);
       const buffer = await readObject(srcKey);
       const ext = srcKey.split('.').pop()?.toLowerCase() || 'png';
-      const url = await putObject(`drafts/${randomUUID()}.${ext}`, buffer, 'image/png');
+      // Content-type UZANTIDAN türetilir. Sabit 'image/png' yazmak, JPG kopyaların Spaces'te
+      // yanlış tiple servis edilmesine yol açıyordu (tarayıcı/Etsy tarafında sürprizler).
+      const url = await putObject(`drafts/${randomUUID()}.${ext}`, buffer, contentTypeForExt(ext));
       const draft = await createImageDraft({
         imageUrl: url,
         source: 'variation',
@@ -69,6 +79,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Taslak kaydedilemedi.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // decodeBase64Limited tavanı aşarsa 413 — düz 500 kullanıcıya sebebi söylemiyordu.
+    return NextResponse.json({ error: message }, { status: bodyErrorStatus(err) ?? 500 });
   }
 }

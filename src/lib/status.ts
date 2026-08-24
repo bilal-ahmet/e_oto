@@ -70,8 +70,10 @@ export const STATUS_META: Record<
     className: 'bg-rose-50 text-rose-700 ring-rose-600/20',
   },
   done: {
-    label: 'Yayınlandı',
-    description: 'Bitti — ürün Etsy’de satışta.',
+    label: 'Etsy’ye aktarıldı',
+    // DİKKAT: pipeline listing'i BİLEREK taslak bırakır (lib/pipeline/run.ts — activate çağrılmaz).
+    // "Yayınlandı / satışta" demek kullanıcıya ilanın canlı olduğunu sandırıyordu.
+    description: 'İlan Etsy’de taslak olarak hazır — satışa açmak için Etsy panelinden yayına al.',
     kind: 'final',
     className: 'bg-green-50 text-green-700 ring-green-600/20',
   },

@@ -1,6 +1,7 @@
 /**
- * Etsy listing oluşturma/yayınlama ve rakip tarama uçları (CLAUDE.md §8, §9).
- * Yayın sırası: createDraftListing → uploadListingImage → uploadListingFile (5×) → activateListing.
+ * Etsy listing oluşturma ve rakip tarama uçları (CLAUDE.md §8, §9).
+ * Sıra: createDraftListing → setListingAttributes → uploadListingImage → uploadListingVideo →
+ * uploadListingFile (5×). İlan TASLAK kalır; yayına alma Etsy panelinden kullanıcıya aittir.
  */
 
 import { etsyFetch, etsyPublicFetch } from './client';
@@ -278,13 +279,10 @@ export async function uploadListingVideo(
   });
 }
 
-/** Listing durumunu 'active' yapar (yayınlar). */
-export async function activateListing(shopId: number, listingId: number): Promise<void> {
-  await etsyFetch(`/shops/${shopId}/listings/${listingId}`, {
-    method: 'PATCH',
-    form: { state: 'active' },
-  });
-}
+// NOT: Listing'i 'active' yapan bir yardımcı BİLEREK YOK. Hat ilanı taslak bırakır; yayına
+// alma kararı Etsy panelinden kullanıcıya aittir (bkz. lib/pipeline/run.ts, publishToEtsyInner
+// sonu). Buradaki `activateListing` hiçbir yerden çağrılmadığı için kaldırıldı — otomatik
+// yayına geçilecekse PATCH /shops/{id}/listings/{id} ile `state: 'active'` göndermek yeterli.
 
 // ── Rakip tarama (CLAUDE.md §9) ─────────────────────────────────────────────
 

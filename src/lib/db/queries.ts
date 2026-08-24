@@ -283,12 +283,6 @@ export async function listPipelineRuns(limit = 50, offset = 0): Promise<Pipeline
   return rows.map(rowToPipelineRun);
 }
 
-/** Toplam run sayısı — panelde sayfalama (kaç sayfa var?) için. */
-export async function countPipelineRuns(): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(pipelineRuns);
-  return row?.n ?? 0;
-}
-
 /**
  * Durum başına run sayısı — panel istatistik kartları için.
  *
@@ -439,12 +433,23 @@ export async function upsertCompetitorListing(listing: CompetitorListing): Promi
     .onConflictDoUpdate({ target: competitorListings.listingId, set: values });
 }
 
-export async function listCompetitorListings(shopId?: number): Promise<CompetitorListing[]> {
-  const rows = await db
+/**
+ * Rakip listeleri, fırsat skoru azalan sırada.
+ *
+ * `limit` VERİLMELİ: panel yalnızca ilk 5'i gösterdiği hâlde bu sorgu tüm tabloyu belleğe
+ * çekiyordu. Rakip tarama cron'u her gün mağaza başına yüzlerce satır yazdığından liste
+ * sürekli büyüyor. Verilmezse sınırsız döner (tam dışa aktarım için).
+ */
+export async function listCompetitorListings(
+  shopId?: number,
+  limit?: number,
+): Promise<CompetitorListing[]> {
+  const q = db
     .select()
     .from(competitorListings)
     .where(shopId != null ? eq(competitorListings.shopId, shopId) : undefined)
     .orderBy(desc(competitorListings.opportunityScore));
+  const rows = limit != null ? await q.limit(limit) : await q;
   return rows.map(rowToCompetitorListing);
 }
 

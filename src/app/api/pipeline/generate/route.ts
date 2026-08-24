@@ -10,6 +10,7 @@ import {
   linkCompetitorResearchToRun,
   updatePipelineRun,
 } from '@/lib/db/queries';
+import { bodyErrorStatus, decodeBase64Limited, readJsonBody } from '@/lib/http/body';
 import { generateVariations, type ReferenceImageInput } from '@/lib/pipeline/run';
 import { putObject } from '@/lib/storage';
 import type { ImageModel, ProductType } from '@/types';
@@ -40,9 +41,10 @@ async function handle(req: NextRequest) {
     referenceImage?: { base64?: string; mediaType?: string };
   };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Geçersiz JSON gövde.' }, { status: 400 });
+    body = await readJsonBody(req);
+  } catch (e) {
+    const status = bodyErrorStatus(e) ?? 400;
+    return NextResponse.json({ error: (e as Error).message }, { status });
   }
 
   const prompt = body.prompt?.trim();
@@ -61,9 +63,17 @@ async function handle(req: NextRequest) {
   const variations = Math.max(1, Math.min(Number(body.variations) || 1, 4));
 
   let reference: ReferenceImageInput | undefined;
+  let referenceBuffer: Buffer | undefined;
   if (body.referenceImage?.base64 && body.referenceImage.mediaType) {
     if (!ALLOWED_MEDIA.includes(body.referenceImage.mediaType)) {
       return NextResponse.json({ error: 'Desteklenmeyen referans görsel tipi.' }, { status: 400 });
+    }
+    // Boyut sınırı + TEK decode: aşağıda tekrar Buffer.from çağırmak aynı görseli iki kez
+    // belleğe açardı.
+    try {
+      referenceBuffer = decodeBase64Limited(body.referenceImage.base64);
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: bodyErrorStatus(e) ?? 400 });
     }
     reference = {
       base64: body.referenceImage.base64,
@@ -86,13 +96,9 @@ async function handle(req: NextRequest) {
   // Referans görseli sakla. ÜRETİMDE KULLANILIR: generateVariations bunu depodan okuyup fal
   // storage'a yükler ve FLUX Kontext'e image_url olarak verir (telif: birebir kopya değil —
   // prompt, Instruction Üretici'nin "değiştir" talimatıdır, bkz. claude/vision).
-  if (reference) {
+  if (reference && referenceBuffer) {
     const ext = reference.mediaType.split('/')[1] ?? 'png';
-    const url = await putObject(
-      `runs/${run.id}/reference.${ext}`,
-      Buffer.from(reference.base64, 'base64'),
-      reference.mediaType,
-    );
+    const url = await putObject(`runs/${run.id}/reference.${ext}`, referenceBuffer, reference.mediaType);
     await updatePipelineRun(run.id, { referenceImageUrl: url });
   }
 
