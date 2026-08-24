@@ -245,6 +245,10 @@ export default async function DashboardPage({
 /**
  * Sayfalama düğmesi — sınırdaki ok ve bulunulan sayfa tıklanamaz (link yerine düz metin) olur.
  * `current` yalnızca görünümü değiştirir: bulunulan sayfa soluk değil, vurgulu gösterilir.
+ *
+ * `scroll={false}` ŞART: App Router'da <Link> varsayılanı her gezinmede sayfanın tepesine
+ * kaydırmaktır. Liste sayfanın ortasında olduğu için kullanıcı her sayfa değiştirdiğinde
+ * yukarı fırlıyor ve listeyi tekrar bulmak için aşağı kaydırmak zorunda kalıyordu.
  */
 function PageLink({
   href,
@@ -266,7 +270,11 @@ function PageLink({
     );
   }
   return (
-    <Link href={href} className={`${base} text-zinc-600 transition-colors hover:bg-zinc-100`}>
+    <Link
+      href={href}
+      scroll={false}
+      className={`${base} text-zinc-600 transition-colors hover:bg-zinc-100`}
+    >
       {children}
     </Link>
   );
