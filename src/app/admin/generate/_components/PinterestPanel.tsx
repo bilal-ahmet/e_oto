@@ -48,17 +48,17 @@ export function PinterestPanel({
 
   if (!copy) {
     return (
-      <div className="mt-5 border-t border-zinc-100 pt-5">
+      <div className="mt-5 border-t border-sand pt-5">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="ghost" onClick={() => void prepare()} disabled={loading}>
             {loading ? <Spinner /> : null}
             {loading ? 'Metin hazırlanıyor…' : "Pinterest'te pinle"}
           </Button>
-          <a href="/api/auth/pinterest/start" className="text-xs text-zinc-400 hover:text-zinc-600">
+          <a href="/api/auth/pinterest/start" className="text-xs text-ink-faint hover:text-ink-body">
             Pinterest hesabını bağla
           </a>
         </div>
-        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-state-error-ink">{error}</p> : null}
       </div>
     );
   }
@@ -66,13 +66,13 @@ export function PinterestPanel({
   const update = (patch: Partial<PinCopy>) => setCopy({ ...copy, ...patch });
 
   return (
-    <div className="mt-5 border-t border-zinc-100 pt-5">
-      <h3 className="text-sm font-semibold text-zinc-900">Pinterest pin metni</h3>
-      <p className="mt-1 text-sm text-zinc-500">
+    <div className="mt-5 border-t border-sand pt-5">
+      <h3 className="text-sm font-semibold text-ink">Pinterest pin metni</h3>
+      <p className="mt-1 text-sm text-ink-muted">
         Pinlemeden önce düzenleyebilirsiniz. Pin, Etsy listing&apos;ine bağlanır — listing&apos;i
         Etsy panelinden aktive ettiğinizden emin olun.
       </p>
-      {warning ? <p className="mt-2 text-sm text-amber-700">{warning}</p> : null}
+      {warning ? <p className="mt-2 text-sm text-state-turn-ink">{warning}</p> : null}
 
       <div className="mt-3 space-y-3">
         <LabeledField label="Başlık" hint={`${copy.title.length}/100`}>
@@ -80,7 +80,7 @@ export function PinterestPanel({
             value={copy.title}
             maxLength={100}
             onChange={(e) => update({ title: e.target.value })}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
         </LabeledField>
         <LabeledField label="Açıklama" hint={`${copy.description.length}/500`}>
@@ -89,7 +89,7 @@ export function PinterestPanel({
             maxLength={500}
             rows={4}
             onChange={(e) => update({ description: e.target.value })}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
         </LabeledField>
         <LabeledField label="Alternatif metin (erişilebilirlik)" hint={`${copy.altText.length}/500`}>
@@ -98,7 +98,7 @@ export function PinterestPanel({
             maxLength={500}
             rows={2}
             onChange={(e) => update({ altText: e.target.value })}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
         </LabeledField>
       </div>
@@ -113,7 +113,7 @@ export function PinterestPanel({
           Metni yeniden üret
         </Button>
       </div>
-      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-state-error-ink">{error}</p> : null}
     </div>
   );
 }

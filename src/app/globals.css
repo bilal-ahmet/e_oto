@@ -101,6 +101,17 @@
   }
 }
 
+/* Bekleme ekranının belirsiz ilerleme çizgisi (WorkingPanel). Yüzde uydurmaz — yalnızca
+   "çalışıyor" der. Yalnızca `motion-safe:` altında uygulanır. */
+@keyframes working-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
 /*
   HAREKET AZALTMA NOTU — burada blanket kural YOK, bilinçli.
   Yaygın `*{animation-duration:0.01ms!important}` kalıbı Spinner'ın `animate-spin`'ini de

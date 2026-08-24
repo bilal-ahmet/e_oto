@@ -19,8 +19,8 @@ export function DoneView({
 }) {
   return (
     <Card>
-      <div className="flex items-center gap-2 text-green-700">
-        <span className="grid size-7 place-items-center rounded-full bg-green-100 text-sm">✓</span>
+      <div className="flex items-center gap-2 text-state-done-ink">
+        <span className="grid size-7 place-items-center rounded-full bg-state-done text-sm">✓</span>
         <h2 className="text-lg font-semibold">Etsy&apos;ye aktarıldı</h2>
       </div>
 
@@ -29,9 +29,9 @@ export function DoneView({
         Bu uyarı olmadan kullanıcı ilanın canlı olduğunu sanıyordu; üstelik taslak bir ilana
         Pinterest pini atmak ölü link üretiyor. Sıradaki adım açıkça söylenir.
       */}
-      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-        <p className="text-sm font-medium text-amber-900">İlan taslak durumda — henüz satışta değil.</p>
-        <p className="mt-1 text-sm text-amber-800">
+      <div className="mt-4 rounded-xs border-l-2 border-l-gold bg-state-turn px-4 py-3">
+        <p className="text-sm font-medium text-state-turn-ink">İlan taslak durumda — henüz satışta değil.</p>
+        <p className="mt-1 text-sm text-state-turn-ink">
           Son kontrolü yapıp Etsy panelinden yayına alman gerekiyor. Pinterest pinini de{' '}
           <strong>ilan yayına girdikten sonra</strong> at; taslak ilanın linki çalışmaz.
         </p>
@@ -40,7 +40,7 @@ export function DoneView({
             href={`https://www.etsy.com/your/shops/me/tools/listings/${run.etsyListingId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 inline-block text-sm font-medium text-amber-900 underline hover:text-amber-950"
+            className="mt-2 inline-block text-sm font-medium text-state-turn-ink underline hover:text-state-turn-ink"
           >
             İlanı Etsy&apos;de aç →
           </a>
@@ -49,13 +49,13 @@ export function DoneView({
 
       <PipelineWarnings run={run} />
       <dl className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-        <div className="rounded-lg bg-zinc-50 px-4 py-3">
-          <dt className="text-zinc-500">Etsy Listing ID</dt>
-          <dd className="font-mono text-zinc-900">{run.etsyListingId ?? '—'}</dd>
+        <div className="rounded-lg bg-shade px-4 py-3">
+          <dt className="text-ink-muted">Etsy Listing ID</dt>
+          <dd className="font-mono text-ink">{run.etsyListingId ?? '—'}</dd>
         </div>
-        <div className="rounded-lg bg-zinc-50 px-4 py-3">
-          <dt className="text-zinc-500">Dijital dosyalar</dt>
-          <dd className="text-zinc-900">
+        <div className="rounded-lg bg-shade px-4 py-3">
+          <dt className="text-ink-muted">Dijital dosyalar</dt>
+          <dd className="text-ink">
             {run.digitalFileUrls ? Object.keys(run.digitalFileUrls).length : 0} JPG
           </dd>
         </div>
@@ -69,7 +69,7 @@ export function DoneView({
             href={`https://www.pinterest.com/pin/${run.pinterestPinId}/`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-rose-600 hover:text-rose-700"
+            className="text-sm font-medium text-gold-deep hover:text-gold-deep"
           >
             ✓ Pinterest&apos;te pinlendi →
           </a>

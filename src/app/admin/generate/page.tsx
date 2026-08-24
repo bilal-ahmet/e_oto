@@ -10,8 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import type { ImageDraft, ImageModel, PinCopy, PipelineRun, ProductType, SeoData } from '@/types';
-import { Button, Card, PageHeader, Spinner } from '@/components/ui';
-import { STATUS_META } from '@/lib/status';
+import { Alert, Button, Card, EmptyState, FRAMED_IMG, Framed, LinkButton, PageHeader, Spinner } from '@/components/ui';
 import {
   PRODUCT_OPTIONS,
   WORKING,
@@ -21,6 +20,7 @@ import {
   type CompetitorAnalysis,
 } from './_components/shared';
 import { Stepper } from './_components/GateRail';
+import { WorkingPanel } from './_components/WorkingPanel';
 import { SeoEditor } from './_components/SeoEditor';
 import { PublishReview } from './_components/PublishReview';
 import { DoneView } from './_components/DoneView';
@@ -458,46 +458,43 @@ export default function GeneratePage() {
   return (
     <div>
       <PageHeader
+        eyebrow="Üretim hattı"
         title="Üretim & Onay"
-        description="Görsel üret, varyasyon seç, SEO'yu düzenle, dosyaları paketle ve onayınla Etsy'ye yayınla. Her adım onayını bekler."
+        description="Dört adım, her biri senin onayını bekler. Sistem hiçbir kapıyı sen görmeden geçmez."
       />
 
-      {run && status !== 'error' ? (
-        <Card className="mb-6">
-          <Stepper status={status!} />
-        </Card>
-      ) : null}
+      {/* Ray artık HER ZAMAN görünür (üretim başlamadan da) — kullanıcı kaç adım
+          olduğunu ve nerede durduğunu ilk ekranda görüyor. */}
+      <div className="-mx-4 mb-8 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <Stepper status={status ?? 'idle'} />
+      </div>
 
       {error ? (
-        <Card className="mb-6 border-red-200 bg-red-50">
-          <p className="text-sm text-red-700">{error}</p>
-        </Card>
+        <Alert tone="danger" className="mb-6">
+          {error}
+        </Alert>
       ) : null}
 
       {pollWarning ? (
-        <Card className="mb-6 border-amber-200 bg-amber-50">
-          <p className="text-sm text-amber-800">{pollWarning}</p>
-        </Card>
+        <Alert tone="warning" className="mb-6">
+          {pollWarning}
+        </Alert>
       ) : null}
 
       {etsyConnected === false ? (
-        <Card className="mb-6 border-amber-200 bg-amber-50">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-amber-900">Etsy bağlı değil</p>
-              <p className="mt-1 text-sm text-amber-800">
-                Üretebilirsiniz ama son adımda &quot;Etsy&apos;ye yayınla&quot; çalışmaz. Mockup ve dosya
-                maliyetini boşa harcamamak için önce bağlanın.
-              </p>
-            </div>
-            <a
-              href="/api/auth/etsy/start"
-              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
-            >
+        <Alert
+          tone="warning"
+          title="Etsy bağlı değil"
+          className="mb-6"
+          action={
+            <LinkButton href="/api/auth/etsy/start" prefetch={false} variant="secondary" size="sm">
               Etsy&apos;ye bağlan
-            </a>
-          </div>
-        </Card>
+            </LinkButton>
+          }
+        >
+          Üretebilirsin ama son adımda &quot;Etsy&apos;ye yayınla&quot; çalışmaz. Mockup ve dosya
+          maliyetini boşa harcamamak için önce bağlan.
+        </Alert>
       ) : null}
 
       {/* Rakip SEO analizi — üretim öncesi ön-adım */}
@@ -512,21 +509,21 @@ export default function GeneratePage() {
       {/* Başlangıç formu */}
       {!run ? (
         <Card>
-          <label className="block text-sm font-medium text-zinc-700">Prompt</label>
+          <label className="block text-sm font-medium text-ink-body">Prompt</label>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={4}
             placeholder="Örn. Abstract boho wall art, neutral earthy tones, minimalist composition"
-            className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+            className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
           />
 
           <div className="mt-4">
-            <label className="block text-sm font-medium text-zinc-700">Ürün tipi</label>
+            <label className="block text-sm font-medium text-ink-body">Ürün tipi</label>
             <select
               value={productType}
               onChange={(e) => setProductType(e.target.value as ProductType)}
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+              className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
             >
               {PRODUCT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -535,7 +532,7 @@ export default function GeneratePage() {
               ))}
             </select>
             {productType === 'tv' ? (
-              <p className="mt-1.5 text-xs text-zinc-500">
+              <p className="mt-1.5 text-xs text-ink-muted">
                 Frame TV: görsel <strong>16:9 yatay</strong> üretilir; 2 JPG (4K 3840×2160 + Full HD 1920×1080),
                 ekran açıklaması, 4 TV + 4 çerçeve mockup, 16:9 video. Ölçü görseli eklenmez.
               </p>
@@ -544,28 +541,28 @@ export default function GeneratePage() {
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-zinc-700">Model</label>
+              <label className="block text-sm font-medium text-ink-body">Model</label>
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value as ImageModel)}
-                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
               >
                 <option value="flux">FLUX.1 Kontext [pro] (fal.ai)</option>
                 <option value="imagen">Imagen 4 (Google)</option>
               </select>
               {model === 'imagen' && referenceFile ? (
-                <p className="mt-1.5 text-xs text-amber-600">
+                <p className="mt-1.5 text-xs text-gold-deep">
                   Imagen 4 görsel girdisi kabul etmiyor — referans görselli üretim FLUX.1 Kontext ile
                   yapılacak.
                 </p>
               ) : null}
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-700">Varyasyon sayısı</label>
+              <label className="block text-sm font-medium text-ink-body">Varyasyon sayısı</label>
               <select
                 value={variations}
                 onChange={(e) => setVariations(Number(e.target.value))}
-                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
               >
                 {[1, 2, 3, 4].map((n) => (
                   <option key={n} value={n}>
@@ -577,42 +574,44 @@ export default function GeneratePage() {
           </div>
 
           <div className="mt-4">
-            <label className="block text-sm font-medium text-zinc-700">
-              Referans görsel <span className="text-zinc-400">(opsiyonel)</span>
+            <label className="block text-sm font-medium text-ink-body">
+              Referans görsel <span className="text-ink-faint">(opsiyonel)</span>
             </label>
             <input
               type="file"
               accept="image/*"
               onChange={onReferenceChange}
-              className="mt-1.5 block w-full text-sm text-zinc-500 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+              className="mt-1.5 block w-full text-sm text-ink-muted file:mr-4 file:rounded-lg file:border-0 file:bg-shade file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink-body hover:file:bg-sand"
             />
             {referencePreview ? (
-              <Image
-                src={referencePreview}
-                alt="Referans önizleme"
-                width={96}
-                height={96}
-                unoptimized
-                className="mt-3 size-24 rounded-lg object-cover ring-1 ring-zinc-200"
-              />
+              <Framed mat="sm" ratio="aspect-square" className="mt-3 w-24">
+                <Image
+                  src={referencePreview}
+                  alt="Referans önizleme"
+                  width={96}
+                  height={96}
+                  unoptimized
+                  className={FRAMED_IMG}
+                />
+              </Framed>
             ) : null}
-            <p className="mt-2 text-xs text-zinc-400">
+            <p className="mt-2 text-xs text-ink-faint">
               Referans görsel modele doğrudan girdi olarak verilir (FLUX.1 Kontext image-to-image), yani
               model görseli gerçekten görür. Birebir kopya çıkmaması için Prompt&apos;un bir değişim
               talimatı olması gerekir — aşağıdaki &quot;Talimat üret&quot; bunu Claude Vision ile hazırlar.
             </p>
 
             {referenceFile ? (
-              <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                <label className="block text-sm font-medium text-zinc-700">
-                  Ek not <span className="text-zinc-400">(opsiyonel — TR veya EN)</span>
+              <div className="mt-4 rounded-lg border border-sand bg-shade p-3">
+                <label className="block text-sm font-medium text-ink-body">
+                  Ek not <span className="text-ink-faint">(opsiyonel — TR veya EN)</span>
                 </label>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
                   placeholder="Örn. evi farklı bir ev gibi tasarla, kahverengi arabayı lacivert yap"
-                  className="mt-1.5 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                  className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
                 />
                 <div className="mt-2">
                   <Button
@@ -624,7 +623,7 @@ export default function GeneratePage() {
                     {instructing ? 'Talimat üretiliyor…' : 'Talimat üret'}
                   </Button>
                 </div>
-                <p className="mt-2 text-xs text-zinc-400">
+                <p className="mt-2 text-xs text-ink-faint">
                   Üretilen talimat üstteki Prompt kutusuna yazılır; düzenleyip onaylayabilirsiniz.
                 </p>
               </div>
@@ -645,13 +644,13 @@ export default function GeneratePage() {
         <Card className="mt-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900">Taslaklar</h2>
-              <p className="text-sm text-zinc-500">
+              <h2 className="text-lg font-semibold text-ink">Taslaklar</h2>
+              <p className="text-sm text-ink-muted">
                 Kaydedilen görseller. Birinden devam edip (SEO → yayın) doğrudan listeleyebilir veya
                 dışarıdan kendi görselini yükleyebilirsin.
               </p>
             </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-700 ring-1 ring-inset ring-zinc-300 transition-colors hover:bg-zinc-50">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-sheet px-4 py-2 text-sm font-medium text-ink-body ring-1 ring-inset ring-sand transition-colors hover:bg-shade">
               {draftBusy ? <Spinner /> : null}
               Görsel yükle
               <input
@@ -669,35 +668,41 @@ export default function GeneratePage() {
           </div>
 
           {drafts.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">Henüz taslak yok.</p>
+            <EmptyState
+              title="Henüz taslak yok"
+              description="Beğendiğin bir varyasyonu kaydedince burada birikir."
+            />
           ) : (
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="mt-4 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
               {drafts.map((d) => (
-                <div
-                  key={d.id}
-                  className="group relative overflow-hidden rounded-lg ring-1 ring-zinc-200"
-                >
-                  <Image
-                    src={d.imageUrl}
-                    alt="Taslak"
-                    width={300}
-                    height={400}
-                    unoptimized
-                    className="aspect-[3/4] w-full object-cover"
-                  />
-                  <button
-                    onClick={() => deleteDraft(d.id)}
-                    disabled={draftBusy}
-                    title="Taslağı sil"
-                    className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-md bg-white/90 text-sm font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200 transition hover:bg-white hover:text-red-600 disabled:opacity-60"
-                  >
-                    ×
-                  </button>
-                  <div className="absolute inset-x-0 bottom-0 p-1.5">
+                <div key={d.id}>
+                  <div className="relative">
+                    <Framed>
+                      <Image
+                        src={d.imageUrl}
+                        alt="Taslak"
+                        width={300}
+                        height={400}
+                        unoptimized
+                        className={FRAMED_IMG}
+                      />
+                    </Framed>
+                    <button
+                      onClick={() => deleteDraft(d.id)}
+                      disabled={draftBusy}
+                      title="Taslağı sil"
+                      aria-label="Taslağı sil"
+                      className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-paper text-sm font-semibold text-ink-muted transition-colors hover:text-state-error-ink disabled:opacity-60"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div>
                     <Button
                       onClick={() => continueFromDraft(d.id)}
                       disabled={draftBusy}
-                      className="w-full !px-2 !py-1.5 text-xs"
+                      size="sm"
+                      className="mt-2 w-full"
                     >
                       Bu taslakla devam et
                     </Button>
@@ -709,57 +714,59 @@ export default function GeneratePage() {
         </Card>
       ) : null}
 
-      {/* Sistem çalışıyor */}
-      {status && WORKING.includes(status) ? (
-        <Card className="flex items-center gap-3 text-zinc-600">
-          <Spinner className="text-rose-600" />
-          {STATUS_META[status].label}…
-        </Card>
-      ) : null}
+      {/* Sistem çalışıyor — kapı no, ne yapıldığı, geçen süre ve normal süre. */}
+      {/* key={status}: adim degisince bilesen yeniden monte olur, sayac 0dan baslar. */}
+      {status && WORKING.includes(status) ? <WorkingPanel key={status} status={status} /> : null}
 
       {/* Kapı 1 — varyasyon seçimi */}
       {status === 'awaiting_approval' && run?.variationUrls?.length ? (
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-zinc-900">Görsel seç</h2>
-          <p className="mb-4 text-sm text-zinc-500">
+          <h2 className="mb-1 text-lg font-semibold text-ink">Görsel seç</h2>
+          <p className="mb-4 text-sm text-ink-muted">
             En beğendiğin varyasyona tıkla; SEO o görsele göre üretilecek.
           </p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {run.variationUrls.map((url, i) => (
-              <div
-                key={i}
-                className="group relative overflow-hidden rounded-lg ring-1 ring-zinc-200 transition hover:ring-2 hover:ring-rose-500"
-              >
-                <button
-                  onClick={() => selectImage(i)}
-                  disabled={busy}
-                  className="block w-full disabled:opacity-50"
-                >
-                  <Image
-                    src={url}
-                    alt={`Varyasyon ${i + 1}`}
-                    width={300}
-                    height={400}
-                    unoptimized
-                    className={`${previewAspectClass(run.productType)} w-full object-cover`}
-                  />
-                  <span className="absolute inset-x-0 bottom-0 bg-black/50 py-1 text-center text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
-                    Bu görseli seç
-                  </span>
-                </button>
-                <button
-                  onClick={() => saveVariation(i, url)}
-                  disabled={savedVariations.has(i)}
-                  className="absolute right-1.5 top-1.5 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-zinc-700 shadow-sm ring-1 ring-zinc-200 transition hover:bg-white disabled:opacity-80"
-                >
-                  {savedVariations.has(i) ? '✓ Kaydedildi' : 'Kaydet'}
-                </button>
+              <div key={i} className="group">
+                <div className="relative">
+                  <button
+                    onClick={() => selectImage(i)}
+                    disabled={busy}
+                    className="block w-full disabled:opacity-50"
+                    aria-label={`Varyasyon ${i + 1} görselini seç`}
+                  >
+                    <Framed ratio={previewAspectClass(run.productType)}>
+                      <Image
+                        src={url}
+                        alt={`Varyasyon ${i + 1}`}
+                        width={300}
+                        height={400}
+                        unoptimized
+                        className={FRAMED_IMG}
+                      />
+                      {/* group-focus-within: klavye kullanicisi bu ipucunu eskiden HIC
+                          goremiyordu — yalnizca hover'da beliriyordu. */}
+                      <span className="absolute inset-x-0 bottom-0 bg-paper/90 py-1 text-center font-mono text-label uppercase tracking-label text-ink opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                        Bu görseli seç
+                      </span>
+                    </Framed>
+                  </button>
+                  <button
+                    onClick={() => saveVariation(i, url)}
+                    disabled={savedVariations.has(i)}
+                    className="absolute right-1 top-1 rounded-full bg-paper px-2 py-0.5 font-mono text-label uppercase tracking-label text-ink-muted transition-colors hover:text-ink disabled:opacity-80"
+                  >
+                    {savedVariations.has(i) ? '✓ Kaydedildi' : 'Kaydet'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
           <div className="mt-5">
-            <Button variant="danger" onClick={reject} disabled={busy}>
-              Reddet / baştan başla
+            {/* Uc kapida da AYNI eylem, ayni isim ve ayni varyant. `danger` yalnizca
+                geri alinamaz, veri silen isler icin ayrildi (bkz. ui.tsx). */}
+            <Button variant="ghost" onClick={reject} disabled={busy}>
+              Bu üretimi bırak
             </Button>
           </div>
         </Card>
@@ -770,6 +777,7 @@ export default function GeneratePage() {
         <SeoEditor
           initial={run.seo}
           image={run.generatedImageUrl ?? null}
+          productType={run.productType}
           busy={busy}
           onApprove={approveSeo}
           onReject={reject}
@@ -796,13 +804,13 @@ export default function GeneratePage() {
       {/* Hata */}
       {status === 'error' && run ? (
         <Card>
-          <div className="flex items-center gap-2 text-red-700">
-            <span className="grid size-7 place-items-center rounded-full bg-red-100 text-sm">!</span>
+          <div className="flex items-center gap-2 text-state-error-ink">
+            <span className="grid size-7 place-items-center rounded-full bg-state-error text-sm">!</span>
             <h2 className="text-lg font-semibold">Hata</h2>
           </div>
-          <p className="mt-3 text-sm text-zinc-600">{run.errorMessage}</p>
+          <p className="mt-3 text-sm text-ink-body">{run.errorMessage}</p>
           {canResume ? (
-            <p className="mt-2 text-sm text-zinc-500">
+            <p className="mt-2 text-sm text-ink-muted">
               Üretilmiş çıktılar (görsel, SEO, mockup, dosyalar) duruyor. Hatanın sebebini
               giderdiyseniz bu run&apos;ı baştan üretmeden kaldığı adımdan sürdürebilirsiniz.
             </p>

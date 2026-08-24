@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import type { PipelineRun } from '@/types';
-import { Button, Card, Spinner } from '@/components/ui';
+import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner } from '@/components/ui';
 import { mockupAspectClass, fileLabel, filesSummary } from './shared';
 import { PipelineWarnings } from './PipelineWarnings';
 import { SeoSummary } from './SeoSummary';
@@ -35,70 +35,122 @@ export function PublishReview({
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-zinc-900">Yayın onayı</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Onaylayınca Etsy taslak listing&apos;i oluşturulur: {imageCount} görsel
-        {run.mediaUrls?.video ? ' + 1 video' : ''} + {files.length} JPG yüklenir ve öznitelikler yazılır.{' '}
-        <strong>Thumbnail</strong> seçtiğin mockup olur. İlan <strong>taslak</strong> kalır — son kontrolü
-        yapıp Etsy panelinden kendin yayına alırsın.
-      </p>
+      <SectionHeading
+        no="04"
+        title="Yayın onayı"
+        description="İlan Etsy'de taslak olarak oluşturulur; son kontrolü yapıp Etsy panelinden kendin yayına alırsın."
+      />
+
+      {/*
+        KARAR BANDI — en kritik karar (fiyat + yayınla) eskiden sayfanın EN ALTINDA,
+        w-28'lik küçük bir input olarak duruyordu. Artık üstte ve ekranda kalıyor.
+      */}
+      <div className="sticky top-4 z-10 -mx-5 mb-5 border-y border-sand bg-shade px-5 py-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <Field label="Fiyat (USD)" htmlFor="publish-price">
+            <div className="relative w-32">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-ink-faint"
+              >
+                $
+              </span>
+              <Input
+                id="publish-price"
+                type="number"
+                min={0.2}
+                step={0.5}
+                value={price}
+                onChange={(e) => setPrice(Number(e.target.value))}
+                className="pl-7 font-mono text-base tabular-nums"
+              />
+            </div>
+          </Field>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => onPublish(price, thumbnailIndex)}
+              disabled={busy || imageCount === 0 || regenIndex !== null}
+            >
+              {busy ? <Spinner /> : null}
+              Etsy&apos;ye yayınla
+            </Button>
+            <Button variant="ghost" onClick={onReject} disabled={busy}>
+              Bu üretimi bırak
+            </Button>
+          </div>
+        </div>
+
+        <p className="mt-3 font-mono text-label uppercase tracking-label tabular-nums text-ink-muted">
+          {imageCount} görsel{run.mediaUrls?.video ? ' · 1 video' : ''} · {files.length} JPG · kapak #
+          {thumbnailIndex + 1}
+        </p>
+
+        {/* Engelleyici uyarı butonun 300px altında değil, kararın YANINDA. */}
+        {imageCount === 0 ? (
+          <p className="mt-2 text-sm font-medium text-state-error-ink">
+            Etsy en az 1 görsel ister. fal kredisi gelince mockup üret ya da ölçü görseli ekle.
+          </p>
+        ) : null}
+      </div>
 
       <PipelineWarnings run={run} />
 
       {/* Mockup'lar */}
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-          Mockup&apos;lar ({filledMockups}/8) — thumbnail seç ⭐ veya beğenmediğini yeniden üret ↻
+        <p className="font-mono text-label uppercase tracking-label text-ink-muted">
+          Mockuplar {filledMockups}/8 — kapak olacak kareye tıkla, beğenmediğini yeniden üret
         </p>
-        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-5 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => {
             const url = mockups[i];
             const isThumb = thumbnailIndex === i && Boolean(url);
             const isRegen = regenIndex === i;
             return (
-              <div
-                key={i}
-                className={`overflow-hidden rounded-lg ring-1 ${
-                  isThumb ? 'ring-2 ring-rose-500' : 'ring-zinc-200'
-                }`}
-              >
+              <div key={i}>
                 <button
                   onClick={() => url && setThumbnailIndex(i)}
                   disabled={!url}
-                  className="relative block w-full"
+                  className="block w-full text-left"
+                  aria-label={`Mockup ${i + 1} kapak yap`}
+                  aria-pressed={isThumb}
                 >
-                  {url ? (
-                    <Image
-                      src={url}
-                      alt={`Mockup ${i + 1}`}
-                      width={300}
-                      height={225}
-                      unoptimized
-                      className={`${mockupAspectClass(run.productType)} w-full object-cover`}
-                    />
-                  ) : (
-                    <div className={`grid ${mockupAspectClass(run.productType)} w-full place-items-center bg-zinc-100 text-xs text-zinc-400`}>
-                      boş
-                    </div>
-                  )}
-                  {isRegen ? (
-                    <span className="absolute inset-0 grid place-items-center bg-white/70">
-                      <Spinner className="text-rose-600" />
-                    </span>
-                  ) : null}
-                  {isThumb ? (
-                    <span className="absolute left-1 top-1 rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                      ⭐ Thumbnail
-                    </span>
-                  ) : null}
+                  <Framed ratio={mockupAspectClass(run.productType)} selected={isThumb}>
+                    {url ? (
+                      <Image
+                        src={url}
+                        alt={`Mockup ${i + 1}`}
+                        width={300}
+                        height={225}
+                        unoptimized
+                        className={FRAMED_IMG}
+                      />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center font-mono text-label uppercase tracking-label text-ink-faint">
+                        boş
+                      </div>
+                    )}
+                    {isRegen ? (
+                      <span className="absolute inset-0 grid place-items-center bg-paper/70">
+                        <Spinner className="text-gold-deep" />
+                      </span>
+                    ) : null}
+                  </Framed>
                 </button>
-                <button
-                  onClick={() => onRegenerate(i)}
-                  disabled={busy || isRegen || regenIndex !== null}
-                  className="w-full bg-zinc-50 py-1 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  {isRegen ? 'Üretiliyor…' : '↻ Yeniden üret'}
-                </button>
+                {/* Kapak işareti ve "yeniden üret" mat'ın DIŞINDA — eserin üstünü
+                    kapatmıyor ve "yeniden üret" artık hover'da belirmiyor, hep görünür. */}
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className="font-mono text-label uppercase tracking-label text-gold-deep">
+                    {isThumb ? 'Kapak' : ''}
+                  </span>
+                  <button
+                    onClick={() => onRegenerate(i)}
+                    disabled={busy || isRegen || regenIndex !== null}
+                    className="font-mono text-label uppercase tracking-label text-ink-faint transition-colors hover:text-ink disabled:opacity-50"
+                  >
+                    {isRegen ? 'Üretiliyor…' : '↻ Yeniden üret'}
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -108,26 +160,26 @@ export function PublishReview({
       {/* Video + ölçü görseli */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Zoom video</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Zoom video</p>
           {run.mediaUrls?.video ? (
             <>
-              <video src={run.mediaUrls.video} controls className="mt-2 w-full rounded-lg ring-1 ring-zinc-200" />
+              <video src={run.mediaUrls.video} controls className="mt-2 w-full rounded-lg ring-1 ring-sand" />
               <a
                 href={run.mediaUrls.video}
                 download
-                className="mt-1 inline-block text-sm text-rose-600 hover:underline"
+                className="mt-1 inline-block text-sm text-gold-deep hover:underline"
               >
                 mp4 indir
               </a>
             </>
           ) : (
-            <p className="mt-2 text-sm text-amber-700">
+            <p className="mt-2 text-sm text-state-turn-ink">
               yok — video üretilemedi. Yayın devam eder ama listing videosuz olur.
             </p>
           )}
         </div>
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Ölçü görseli</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Ölçü görseli</p>
           {run.mediaUrls?.sizeGuide ? (
             <Image
               src={run.mediaUrls.sizeGuide}
@@ -135,14 +187,14 @@ export function PublishReview({
               width={300}
               height={300}
               unoptimized
-              className="mt-2 w-full rounded-lg object-contain ring-1 ring-zinc-200"
+              className="mt-2 w-full rounded-lg object-contain ring-1 ring-sand"
             />
           ) : run.productType === 'tv' ? (
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-ink-faint">
               TV ürününde ölçü görseli kullanılmaz.
             </p>
           ) : (
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-ink-faint">
               yok — <code>public/templates/size-guide.png</code> ekleyin
             </p>
           )}
@@ -151,13 +203,13 @@ export function PublishReview({
 
       {/* Dijital dosyalar */}
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
           {filesSummary(run.productType, files.length)}
         </p>
         <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
           {files.map(([key, url]) => (
             <li key={key} className="text-sm">
-              <a href={url} target="_blank" rel="noreferrer" className="text-rose-600 hover:underline">
+              <a href={url} target="_blank" rel="noreferrer" className="text-gold-deep hover:underline">
                 {fileLabel(key)}
               </a>
             </li>
@@ -167,31 +219,6 @@ export function PublishReview({
 
       {run.seo ? <SeoSummary seo={run.seo} /> : null}
 
-      <div className="mt-5 flex items-end gap-3">
-        <div>
-          <label className="block text-sm font-medium text-zinc-700">Fiyat (USD)</label>
-          <input
-            type="number"
-            min={0.2}
-            step={0.5}
-            value={price}
-            onChange={(e) => setPrice(Number(e.target.value))}
-            className="mt-1.5 w-28 rounded-md border border-zinc-300 px-2.5 py-1.5 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-          />
-        </div>
-        <Button onClick={() => onPublish(price, thumbnailIndex)} disabled={busy || imageCount === 0 || regenIndex !== null}>
-          {busy ? <Spinner /> : null}
-          Etsy&apos;ye yayınla
-        </Button>
-        <Button variant="ghost" onClick={onReject} disabled={busy}>
-          İptal
-        </Button>
-      </div>
-      {imageCount === 0 ? (
-        <p className="mt-2 text-xs text-amber-600">
-          Etsy en az 1 görsel ister. fal kredisi gelince mockup üret ya da ölçü görseli ekle.
-        </p>
-      ) : null}
     </Card>
   );
 }

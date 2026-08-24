@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Card, Spinner } from '@/components/ui';
+import { Alert, Button, Input, Spinner } from '@/components/ui';
 import { type CompetitorAnalysis } from './shared';
 
 export function CompetitorResearchPanel({
@@ -38,63 +38,82 @@ export function CompetitorResearchPanel({
   }
 
   return (
-    <Card className="mb-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900">Rakip SEO Analizi <span className="text-sm font-normal text-zinc-400">(opsiyonel)</span></h2>
-          <p className="text-sm text-zinc-500">
-            İyi performans gösteren bir Etsy ürününün linkini gir; sistem o nişten özgün SEO çıkarsın.
-            Bağlarsan, SEO seçtiğin görsele göre üretilirken bu nişe/keyword&apos;lere yönlendirilir.
-          </p>
-        </div>
-        {research ? (
-          <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
-            Bağlı #{research.id}
-          </span>
-        ) : null}
-      </div>
-
+    <div className="mb-6 rounded-xs border border-sand bg-shade">
+      {/*
+        Bu panel OPSIYONEL bir on-adim ama eskiden asil formun ustunde tam genislikte
+        bir karttı ve baslangic ekranini dagitiyordu. Artik tek satirlik bir serit;
+        detaylar <details> icinde acilir (state gerekmez, klavye destegi bedava).
+      */}
       {!research ? (
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.etsy.com/listing/123456789/..."
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-          />
-          <Button onClick={analyze} disabled={analyzing || !url.trim()}>
-            {analyzing ? <Spinner /> : null}
-            {analyzing ? 'Analiz ediliyor…' : 'Analiz Et'}
-          </Button>
-        </div>
+        <details className="group">
+          <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <span className="font-mono text-label uppercase tracking-label text-ink-muted">
+              Rakip SEO analizi · opsiyonel
+            </span>
+            <span className="font-mono text-label uppercase tracking-label text-gold-deep">
+              Aç / kapat
+            </span>
+          </summary>
+          <div className="border-t border-sand px-4 py-4">
+            <p className="max-w-2xl text-sm leading-relaxed text-ink-body">
+              İyi performans gösteren bir Etsy ürününün linkini gir; sistem o nişten özgün SEO
+              çıkarsın. Bağlarsan, SEO seçtiğin görsele göre üretilirken bu nişe/keyword&apos;lere
+              yönlendirilir.
+            </p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <Input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://www.etsy.com/listing/123456789/..."
+                aria-label="Rakip Etsy ürün linki"
+              />
+              <Button onClick={analyze} disabled={analyzing || !url.trim()} className="shrink-0">
+                {analyzing ? <Spinner /> : null}
+                {analyzing ? 'Analiz ediliyor…' : 'Analiz et'}
+              </Button>
+            </div>
+            {err ? (
+              <Alert tone="danger" compact className="mt-3">
+                {err}
+              </Alert>
+            ) : null}
+          </div>
+        </details>
       ) : null}
 
-      {err ? <p className="mt-3 text-sm text-red-700">{err}</p> : null}
-
       {research ? (
-        <div className="mt-4 space-y-4 border-t border-zinc-100 pt-4">
+        <details className="group">
+          <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 border-l-2 border-l-gold px-4 py-3">
+            <span className="min-w-0 truncate font-mono text-label uppercase tracking-label text-gold-deep">
+              ✓ Rakip analizi bağlı · #{research.id} · {research.source.title}
+            </span>
+            <span className="font-mono text-label uppercase tracking-label text-ink-muted">
+              Detaylar
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-sand px-4 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Kaynak (rakip)</p>
-              <p className="mt-1 text-sm text-zinc-800">{research.source.title}</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Kaynak (rakip)</p>
+              <p className="mt-1 text-sm text-ink">{research.source.title}</p>
+              <p className="mt-1 text-xs text-ink-muted">
                 ❤ {research.source.numFavorers} favori · {research.source.views} görüntülenme · taxonomy{' '}
                 {research.source.taxonomyId || '—'}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {research.source.tags.map((t, i) => (
-                  <span key={i} className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                  <span key={i} className="rounded-md bg-shade px-2 py-0.5 text-xs text-ink-body">
                     {t}
                   </span>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-rose-500">Üretilen (özgün)</p>
-              <p className="mt-1 text-sm font-medium text-zinc-900">{research.generated.title}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-gold-deep">Üretilen (özgün)</p>
+              <p className="mt-1 text-sm font-medium text-ink">{research.generated.title}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {research.generated.tags.map((t, i) => (
-                  <span key={i} className="rounded-md bg-rose-50 px-2 py-0.5 text-xs text-rose-700">
+                  <span key={i} className="rounded-md bg-shade px-2 py-0.5 text-xs text-gold-deep">
                     {t}
                   </span>
                 ))}
@@ -102,20 +121,20 @@ export function CompetitorResearchPanel({
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               Üretilen açıklama{' '}
-              <span className="font-normal normal-case tracking-normal text-amber-600">
+              <span className="font-normal normal-case tracking-normal text-gold-deep">
                 — sadece fikir amaçlı, listing&apos;e geçmez
               </span>
             </p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{research.generated.description}</p>
-            <p className="mt-1.5 text-xs text-zinc-400">
+            <p className="mt-1 whitespace-pre-wrap text-sm text-ink-body">{research.generated.description}</p>
+            <p className="mt-1.5 text-xs text-ink-faint">
               Üretime yalnızca yukarıdaki <strong>başlık ve etiketler</strong> referans olarak taşınır.
               Listing açıklaması, seçtiğin görselden yazılan hook + sabit şablondan oluşur.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-ink-muted">
               Bu analiz üretime bağlandı; aşağıdan prompt girip başlayabilirsin.
             </span>
             <Button variant="ghost" onClick={onClear}>
@@ -123,7 +142,8 @@ export function CompetitorResearchPanel({
             </Button>
           </div>
         </div>
+        </details>
       ) : null}
-    </Card>
+    </div>
   );
 }
