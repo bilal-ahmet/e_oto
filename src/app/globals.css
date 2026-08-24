@@ -1,10 +1,110 @@
 @import "tailwindcss";
 
+/* ────────────────────────────────────────────────────────────────────────────
+   TASARIM TOKEN'LARI — Tailwind v4 CSS-first (tailwind.config.* YOK)
+   Panel, marka sitesinin (src/app/(marketing)/) kâğıt paletini paylaşır.
+
+   RENK KULLANIM KURALI: yorumdaki oranlar WCAG kontrastıdır, kâğıt zemine göre
+   ölçülmüştür. Metin için eşik 4.5, çizgi/işaret için 3.0.
+   `gold` kâğıtta 3.39 → METİN OLARAK KULLANILMAZ, yalnızca çizgi/odak/işaret.
+   Altın metin gerektiğinde `gold-deep` (5.09).
+   ──────────────────────────────────────────────────────────────────────────── */
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
 }
 
-body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+/*
+  `inline` BİLEREK yok: Tailwind bu blokta `:root`'a gerçek CSS değişkenleri de basar,
+  böylece utility'nin yetmediği yerde `var(--color-sand)` ile aynı token'a erişilebilir.
+*/
+@theme {
+  /* ── Yüzeyler (kâğıt) ───────────────────────────────────────────────────── */
+  --color-paper: #f1ece2; /* sayfa zemini + paspartu kenarı (marka sitesiyle aynı) */
+  --color-shade: #ebe4d5; /* ikincil bant, girintili panel, tablo başlığı */
+  --color-sheet: #faf8f3; /* kart yüzeyi — "masadaki sayfa", kâğıda göre 1.11 */
+  --color-sand: #ddd2ba; /* kenarlık */
+  --color-sand-soft: #e6dcc7; /* liste içi ince ayraç (divide-*) */
+
+  /* ── Mürekkep (metin kademeleri) ────────────────────────────────────────── */
+  --color-ink: #241f1c; /* 13.85 — başlık + dolgu buton zemini */
+  --color-ink-body: #4a4238; /*  8.38 — gövde metni */
+  --color-ink-muted: #5c5347; /*  6.41 — ikincil metin */
+  --color-ink-faint: #6b6252; /*  5.10 — en silik metin.
+      Marka sitesindeki #7a715f (4.10) BİLEREK kullanılmıyor: AA'yı geçmiyor. */
+
+  /* ── Altın aksan ────────────────────────────────────────────────────────── */
+  --color-gold: #9c7a3c; /*  3.39 — ÇİZGİ / ODAK / İŞARET. Metin değil. */
+  --color-gold-deep: #7a5f2f; /*  5.09 — altın metin gerektiğinde */
+
+  /* ── Pipeline durum çiftleri (bg + ink) ─────────────────────────────────────
+     Her çiftin metin kontrastı kendi zemininde ölçüldü; hepsi AA üstü.
+     Üç onay kapısı (görsel/SEO/yayın) BİLEREK aynı `turn` tonunu paylaşır:
+     "sıra sende" tek bir anlamdır. Hangi kapı olduğunu renk değil, kapı numarası
+     ve STATUS_META.description cümlesi söyler. */
+  --color-state-idle: #e3ddcf;
+  --color-state-idle-ink: #46403a; /* 7.55 — sırada */
+  --color-state-work: #dfe3ea;
+  --color-state-work-ink: #35455e; /* 7.54 — görsel üretiliyor */
+  --color-state-turn: #f2e6cb;
+  --color-state-turn-ink: #6d5426; /* 5.76 — SIRA SENDE (3 kapı) */
+  --color-state-write: #e6dfe9;
+  --color-state-write-ink: #54406a; /* 6.94 — metinler yazılıyor */
+  --color-state-files: #dbe6e0;
+  --color-state-files-ink: #2f5b4a; /* 6.04 — dosyalar hazırlanıyor */
+  --color-state-ship: #f0dfd2;
+  --color-state-ship-ink: #7a4527; /* 5.98 — Etsy'ye yükleniyor */
+  --color-state-pin: #efdcdc;
+  --color-state-pin-ink: #7b3b3f; /* 6.28 — Pinterest'e pinleniyor */
+  --color-state-done: #dde7d8;
+  --color-state-done-ink: #3b5a34; /* 6.11 — bitti */
+  --color-state-error: #f0dbd8;
+  --color-state-error-ink: #8a3428; /* 6.08 — hata */
+
+  /* ── Tipografi ──────────────────────────────────────────────────────────────
+     Mono etiket ölçüsü — marka sitesinin eyebrow'u ile aynı (11px / 0.16em). */
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
+  --tracking-label: 0.16em;
+
+  /* ── Gölge ──────────────────────────────────────────────────────────────────
+     TEK gölge, yalnızca çerçeveli eserde (ui.tsx → Framed). Kartlarda gölge YOK;
+     marka dili mat/baskı, yüzey ayrımı 1px `border-sand` ile yapılır. */
+  --shadow-frame:
+    0 1px 0 rgb(36 31 28 / 0.05), 0 10px 26px -14px rgb(36 31 28 / 0.22);
 }
+
+@layer base {
+  body {
+    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  }
+
+  /*
+    GÖRÜNÜR KLAVYE ODAĞI — tek kural, tüm uygulama.
+    Elle yazılmış 18 form girdisinin 4'ünde focus stili unutulmuştu (Pinterest board
+    adı, pin başlığı/açıklaması/alt metni). Kuralı burada tanımlamak o açığı kapatır
+    ve bir daha unutulmasını imkânsız kılar.
+    `:where()` özgüllüğü 0 → bileşen bazlı override hâlâ kazanır.
+    Altın halka kâğıtta 3.39, gölgede 3.15, levhada 3.76, ink dolgu üstünde 4.09 →
+    dördü de WCAG 2.2 metin-dışı 3:1 eşiğinin üstünde.
+  */
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-paper);
+  }
+}
+
+/*
+  HAREKET AZALTMA NOTU — burada blanket kural YOK, bilinçli.
+  Yaygın `*{animation-duration:0.01ms!important}` kalıbı Spinner'ın `animate-spin`'ini de
+  dondurur; donmuş bir spinner kullanıcıya "sayfa çöktü" diye okunur. Bunun yerine:
+    · dekoratif hareket `motion-safe:` varyantıyla yazılır (azaltılmış modda hiç oluşmaz)
+    · Spinner fonksiyoneldir ve yanında DAİMA metin bulunur — bilgi metinden gelir
+*/

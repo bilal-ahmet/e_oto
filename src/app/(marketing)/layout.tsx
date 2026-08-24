@@ -1,20 +1,16 @@
 import Link from 'next/link';
-import { Fraunces } from 'next/font/google';
 import { publicBranding } from '@/lib/env';
 import { EmailLink } from '@/components/EmailLink';
 
-const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin'],
-  axes: ['opsz'],
-});
+// Fraunces artık burada YÜKLENMEZ — `--font-fraunces` root layout'tan (lib/fonts.ts) gelir.
+// Panel de aynı fontu kullandığı için iki ayrı next/font çağrısı iki ayrı örnek üretiyordu.
 
 const SHOP_URL = `https://www.etsy.com/shop/${publicBranding.shopName}`;
 const CONTACT_EMAIL = publicBranding.contactEmail;
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${fraunces.variable} flex min-h-full flex-col bg-[#f1ece2] text-[#241f1c]`}>
+    <div className="flex min-h-full flex-col bg-[#f1ece2] text-[#241f1c]">
       <header className="border-b border-[#ddd2ba]">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5 sm:px-8">
           <Link href="/" className="font-[family-name:var(--font-fraunces)] text-lg tracking-tight">
