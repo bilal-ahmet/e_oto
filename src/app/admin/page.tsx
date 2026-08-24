@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Card, PageHeader } from '@/components/ui';
+import { Card, EmptyState, LinkButton, PageHeader, SectionHeading } from '@/components/ui';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ClearRunsButton } from '@/components/ClearRunsButton';
 import { EtsyConnection } from '@/components/EtsyConnection';
@@ -100,71 +100,73 @@ export default async function DashboardPage({
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader
-          title="Panel"
-          description="Üretim hattı durumu ve rakip fırsatlarına genel bakış."
-        />
-        <Link
-          href="/admin/drafts"
-          className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
-        >
-          Taslaklar →
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Genel bakış"
+        title="Panel"
+        description="Üretim hattı durumu ve rakip fırsatlarına genel bakış."
+        action={<LinkButton href="/admin/generate">Yeni üretim</LinkButton>}
+      />
 
       <EtsyConnection callbackResult={{ status: etsy, reason: etsy ? reason : undefined }} />
       <PinterestConnection callbackResult={{ status: pinterest, reason: pinterest ? reason : undefined }} />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <div className="text-sm text-zinc-500">{s.label}</div>
-            <div className="mt-1 text-3xl font-semibold text-zinc-900">{s.value}</div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="mt-8 grid gap-6 lg:grid-cols-5">
-        <section className="lg:col-span-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900">Son çalıştırmalar</h2>
-              <p className="text-xs text-zinc-400">
-                Sadece bilgi amaçlı liste — işlem yapmak için üretim ekranını kullan.
-              </p>
+      {/* Sayaçlar tek bir "defter şeridi": dört ayrı kart yerine bölünmüş tek levha —
+          bunlar bağımsız kartlar değil, aynı tablonun sütunları. */}
+      <Card padded={false}>
+        <dl className="grid grid-cols-2 divide-sand md:grid-cols-4 md:divide-x">
+          {stats.map((s, i) => (
+            <div
+              key={s.label}
+              className={`px-5 py-4 ${i < 2 ? 'border-b border-sand md:border-b-0' : ''}`}
+            >
+              <dt className="font-mono text-label uppercase tracking-label text-ink-faint">
+                {s.label}
+              </dt>
+              <dd className="mt-1 font-display text-4xl tabular-nums text-ink">{s.value}</dd>
             </div>
-            <Link href="/admin/generate" className="text-sm font-medium text-rose-600 hover:text-rose-700">
-              Yeni üretim →
-            </Link>
-          </div>
+          ))}
+        </dl>
+      </Card>
+
+      <div className="mt-10 grid gap-8 md:grid-cols-2 lg:grid-cols-5">
+        <section className="lg:col-span-3">
+          <SectionHeading
+            title="Son çalıştırmalar"
+            description="Sadece bilgi amaçlı liste — işlem yapmak için üretim ekranını kullan."
+          />
 
           <Card padded={false}>
             {runs.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-zinc-400">Henüz çalıştırma yok.</p>
+              <EmptyState
+                title="Henüz çalıştırma yok"
+                description="İlk üretimi başlattığında buraya düşecek."
+                action={<LinkButton href="/admin/generate" size="sm">Yeni üretim</LinkButton>}
+              />
             ) : (
               <>
-                <ul className="divide-y divide-zinc-100">
+                <ul className="divide-y divide-sand-soft">
                   {runs.map((run) => {
                     const meta = STATUS_META[run.status];
                     // Hata durumunda jenerik açıklama yerine gerçek sebebi göster — asıl bilgi odur.
                     const note =
                       run.status === 'error' && run.errorMessage ? run.errorMessage : meta.description;
+                    // Not rengi durum SINIFINDAN türetilir (elle üçleme değil) — sıra
+                    // sendeyse altın, hata kırmızı, gerisi sakin.
                     const noteClass =
                       run.status === 'error'
-                        ? 'text-red-600'
+                        ? 'text-state-error-ink'
                         : meta.kind === 'waiting'
-                          ? 'text-amber-700'
-                          : 'text-zinc-500';
+                          ? 'text-state-turn-ink'
+                          : 'text-ink-muted';
                     return (
                       <li key={run.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-zinc-900">{run.prompt}</p>
+                          <p className="truncate text-sm font-medium text-ink">{run.prompt}</p>
                           <p className={`mt-1 text-xs ${noteClass}`}>{note}</p>
                         </div>
                         <div className="shrink-0 text-right">
                           <StatusBadge status={run.status} />
-                          <p className="mt-1 text-xs text-zinc-400">
+                          <p className="mt-1.5 font-mono text-label tabular-nums text-ink-faint">
                             {formatDate(run.updatedAt)} · {run.id.slice(0, 8)}
                           </p>
                         </div>
@@ -173,8 +175,8 @@ export default async function DashboardPage({
                   })}
                 </ul>
 
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-zinc-100 px-5 py-3">
-                  <span className="text-xs text-zinc-400">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-sand bg-shade px-5 py-3">
+                  <span className="font-mono text-label uppercase tracking-label tabular-nums text-ink-faint">
                     {offset + 1}–{offset + runs.length} / {total} kayıt
                   </span>
                   <div className="flex items-center gap-1">
@@ -183,7 +185,7 @@ export default async function DashboardPage({
                     </PageLink>
                     {pageNumbers(page, pageCount).map((n, i) =>
                       n === 'gap' ? (
-                        <span key={`gap-${i}`} className="px-1 text-xs text-zinc-300">
+                        <span key={`gap-${i}`} className="px-1 text-xs text-sand">
                           …
                         </span>
                       ) : (
@@ -207,28 +209,37 @@ export default async function DashboardPage({
         </section>
 
         <section className="lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900">En iyi fırsatlar</h2>
-            <Link
-              href="/admin/competitors"
-              className="text-sm font-medium text-rose-600 hover:text-rose-700"
-            >
-              Tümü →
-            </Link>
-          </div>
+          <SectionHeading
+            title="En iyi fırsatlar"
+            action={
+              <Link
+                href="/admin/competitors"
+                className="font-mono text-label uppercase tracking-label text-ink-muted hover:text-ink"
+              >
+                Tümü →
+              </Link>
+            }
+          />
           <Card padded={false}>
             {topCompetitors.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-zinc-400">Henüz rakip taraması yok.</p>
+              <EmptyState
+                title="Henüz rakip taraması yok"
+                description="Rakip Analizi ekranından bir mağaza tarat."
+              />
             ) : (
-              <ul className="divide-y divide-zinc-100">
+              <ul className="divide-y divide-sand-soft">
                 {topCompetitors.map((c) => (
                   <li key={c.listingId} className="px-5 py-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-900">{c.title}</p>
-                        <p className="mt-0.5 text-xs text-zinc-400">{shopName(c.shopId)}</p>
+                        <p className="truncate text-sm font-medium text-ink">{c.title}</p>
+                        <p className="mt-0.5 font-mono text-label uppercase tracking-label text-ink-faint">
+                          {shopName(c.shopId)}
+                        </p>
                       </div>
-                      <span className="shrink-0 rounded-md bg-green-50 px-2 py-0.5 text-sm font-semibold text-green-700">
+                      {/* Skor bir rozet değil, bir ölçüm: solundaki altın çizgi onu
+                          vurgular, renkli bir hap gibi dikkat çalmaz. */}
+                      <span className="shrink-0 border-l-2 border-gold pl-2 font-mono text-base tabular-nums text-ink">
                         {c.opportunityScore.toFixed(1)}
                       </span>
                     </div>
@@ -262,10 +273,10 @@ function PageLink({
   current?: boolean;
   children: React.ReactNode;
 }) {
-  const base = 'rounded-md px-2.5 py-1 text-xs font-medium';
+  const base = 'rounded-full px-2.5 py-1 font-mono text-label uppercase tracking-label tabular-nums';
   if (disabled) {
     return (
-      <span className={`${base} ${current ? 'bg-rose-600 text-white' : 'text-zinc-300'}`}>
+      <span className={`${base} ${current ? 'bg-ink text-paper' : 'text-sand'}`}>
         {children}
       </span>
     );
@@ -274,7 +285,7 @@ function PageLink({
     <Link
       href={href}
       scroll={false}
-      className={`${base} text-zinc-600 transition-colors hover:bg-zinc-100`}
+      className={`${base} text-ink-muted transition-colors hover:bg-sand-soft hover:text-ink`}
     >
       {children}
     </Link>

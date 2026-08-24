@@ -59,12 +59,12 @@ export function Nav() {
           })}
         </nav>
 
-        <a
+        <Link
           href="/"
           className="shrink-0 rounded-full border border-ink px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
         >
           Mağaza sitesi
-        </a>
+        </Link>
       </div>
     </header>
   );

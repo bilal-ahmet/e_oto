@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Spinner } from '@/components/ui';
+import { Alert, Button, Spinner } from '@/components/ui';
 
 /**
  * "Geçmişi temizle" — tüm pipeline kayıtlarını ve depodaki dosyalarını siler.
@@ -39,7 +39,7 @@ export function ClearRunsButton({ total, active }: { total: number; active: numb
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="text-sm font-medium text-zinc-400 transition-colors hover:text-red-600"
+        className="font-mono text-label uppercase tracking-label text-ink-faint transition-colors hover:text-state-error-ink"
       >
         Geçmişi temizle
       </button>
@@ -47,9 +47,8 @@ export function ClearRunsButton({ total, active }: { total: number; active: numb
   }
 
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-      <p className="text-sm font-medium text-red-900">{total} kaydın tamamı silinsin mi?</p>
-      <ul className="mt-1.5 space-y-0.5 text-sm text-red-800">
+    <Alert tone="danger" title={`${total} kaydın tamamı silinsin mi?`}>
+      <ul className="space-y-0.5">
         <li>• Kayıtlarla birlikte üretilen görseller, baskı dosyaları ve videolar da silinir.</li>
         <li>• Etsy’de yayınlanmış ilanlar etkilenmez, onlar yerinde kalır.</li>
         {active > 0 ? (
@@ -59,27 +58,26 @@ export function ClearRunsButton({ total, active }: { total: number; active: numb
         ) : null}
         <li>• Bu işlem geri alınamaz.</li>
       </ul>
-      {error ? <p className="mt-2 text-sm font-medium text-red-700">{error}</p> : null}
+      {error ? <p className="mt-2 font-medium">{error}</p> : null}
       <div className="mt-3 flex items-center gap-2">
-        <button
-          onClick={clearAll}
-          disabled={busy}
-          className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-        >
+        {/* `danger` varyantı yalnızca geri alınamaz, veri silen işler için (bkz. ui.tsx).
+            Vazgeçmek zararsız bir çıkış olduğu için `ghost`. */}
+        <Button variant="danger" size="sm" onClick={clearAll} disabled={busy}>
           {busy ? <Spinner /> : null}
           Evet, hepsini sil
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => {
             setConfirming(false);
             setError(null);
           }}
           disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-red-100 disabled:opacity-50"
         >
           Vazgeç
-        </button>
+        </Button>
       </div>
-    </div>
+    </Alert>
   );
 }

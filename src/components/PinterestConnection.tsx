@@ -7,8 +7,7 @@
  * pinler YALNIZCA sahibine görünür, bu bilinmezse "pin atıldı ama Pinterest'te yok" sanılır.
  */
 
-import Link from 'next/link';
-import { Card } from '@/components/ui';
+import { Alert, LinkButton } from '@/components/ui';
 import { PinterestBoardPicker } from '@/components/PinterestBoardPicker';
 import { getOAuthTokenMeta, getSetting } from '@/lib/db/queries';
 import { apiEnv, isSandbox } from '@/lib/pinterest/hosts';
@@ -70,73 +69,46 @@ export async function PinterestConnection({
   const meta = await loadStatus();
   const sandbox = isSandbox();
 
+  // prefetch={false} ŞART — OAuth başlatma route'u prefetch EDİLMEMELİ.
   const connectButton = (
-    <Link
-      href="/api/auth/pinterest/start"
-      prefetch={false}
-      className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
-    >
+    <LinkButton href="/api/auth/pinterest/start" prefetch={false} variant="secondary" size="sm">
       {meta.connected ? 'Yeniden yetkilendir' : "Pinterest'e bağlan"}
-    </Link>
+    </LinkButton>
   );
 
   const sandboxNote = sandbox ? (
-    <p className="mt-1 text-sm text-zinc-500">
+    <p className="mt-1">
       <span className="font-medium">Sandbox (trial) modu:</span> oluşturulan pinler yalnızca size
       görünür, herkese açık değildir. Standart erişim onaylandığında{' '}
-      <code className="rounded bg-zinc-100 px-1">PINTEREST_API_ENV=production</code> yapıp yeniden
-      yetkilendirin.
+      <code className="rounded-xs bg-paper px-1 font-mono">PINTEREST_API_ENV=production</code> yapıp
+      yeniden yetkilendirin.
     </p>
   ) : null;
 
   if (callbackResult?.status === 'error') {
     return (
-      <Card className="mb-6 border-red-200 bg-red-50">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-red-800">Pinterest yetkilendirmesi başarısız</p>
-            <p className="mt-1 break-words text-sm text-red-700">
-              {callbackResult.reason ?? 'Bilinmeyen sebep.'}
-            </p>
-          </div>
-          {connectButton}
-        </div>
-      </Card>
+      <Alert tone="danger" title="Pinterest yetkilendirmesi başarısız" action={connectButton} className="mb-6">
+        <span className="break-words">{callbackResult.reason ?? 'Bilinmeyen sebep.'}</span>
+      </Alert>
     );
   }
 
   if (!meta.connected) {
     return (
-      <Card className="mb-6 border-amber-200 bg-amber-50">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-amber-900">Pinterest bağlı değil</p>
-            <p className="mt-1 text-sm text-amber-800">
-              Pin adımı çalışmaz. Etsy yayınından sonra pin atmak istiyorsanız bağlanın.
-            </p>
-            {sandboxNote}
-          </div>
-          {connectButton}
-        </div>
-      </Card>
+      <Alert tone="warning" title="Pinterest bağlı değil" action={connectButton} className="mb-6">
+        Pin adımı çalışmaz. Etsy yayınından sonra pin atmak istiyorsanız bağlanın.
+        {sandboxNote}
+      </Alert>
     );
   }
 
   if (meta.tokenEnvMismatch) {
     return (
-      <Card className="mb-6 border-amber-200 bg-amber-50">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-amber-900">Pinterest ortamı değişti</p>
-            <p className="mt-1 text-sm text-amber-800">
-              Kayıtlı token <strong>{meta.tokenEnv}</strong> ortamında alınmış, şu anki ortam ise{' '}
-              <strong>{apiEnv()}</strong>. Sandbox ve production token&apos;ları birbirinin yerine
-              geçmez — yeniden yetkilendirin ve board&apos;u tekrar seçin.
-            </p>
-          </div>
-          {connectButton}
-        </div>
-      </Card>
+      <Alert tone="warning" title="Pinterest ortamı değişti" action={connectButton} className="mb-6">
+        Kayıtlı token <strong>{meta.tokenEnv}</strong> ortamında alınmış, şu anki ortam ise{' '}
+        <strong>{apiEnv()}</strong>. Sandbox ve production token&apos;ları birbirinin yerine geçmez —
+        yeniden yetkilendirin ve board&apos;u tekrar seçin.
+      </Alert>
     );
   }
 
@@ -145,40 +117,34 @@ export async function PinterestConnection({
   const { boards, error: boardsError } = await loadBoards();
 
   return (
-    <Card className={`mb-6 ${meta.expiringSoon ? 'border-amber-200 bg-amber-50' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-zinc-900">
-            <span className="mr-2 inline-block size-2 rounded-full bg-green-500 align-middle" aria-hidden />
-            Pinterest bağlı
-            <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-normal text-zinc-600">
-              {apiEnv()}
-            </span>
-            {callbackResult?.status === 'connected' ? (
-              <span className="ml-2 text-green-700">— yetkilendirme tamamlandı</span>
-            ) : null}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            Son yetkilendirme: {fmt(meta.updatedAt)} · Erişim anahtarı geçerlilik: {fmt(meta.expiresAt)}
-            {meta.hasRefreshToken ? '' : ' · yenileme anahtarı YOK (süre dolunca yeniden bağlanmalısınız)'}
-          </p>
-          {sandboxNote}
-          {meta.expiringSoon ? (
-            <p className="mt-1 text-sm font-medium text-amber-800">
-              Yenileme anahtarı ~{meta.daysLeft} gün içinde geçersiz olacak — yeniden yetkilendirin.
-              (Normalde günlük tazeleme görevi bunu kendisi yapar; bu uyarı görünüyorsa görev
-              çalışmıyor demektir — loglarda <code>[cron] Pinterest token</code> satırlarına bakın.)
-            </p>
-          ) : null}
-          <PinterestBoardPicker
-            boards={boards}
-            initialSelectedId={meta.boardId}
-            loadError={boardsError}
-            sandbox={sandbox}
-          />
-        </div>
-        {connectButton}
-      </div>
-    </Card>
+    <Alert
+      tone={meta.expiringSoon ? 'warning' : 'info'}
+      title="Pinterest bağlı"
+      action={connectButton}
+      className="mb-6"
+    >
+      <p className="font-mono text-label uppercase tracking-label">
+        <span className="mr-2 inline-block size-1.5 rounded-full bg-state-done-ink align-middle" aria-hidden />
+        {apiEnv()} · Son yetkilendirme: {fmt(meta.updatedAt)} · Geçerlilik: {fmt(meta.expiresAt)}
+        {callbackResult?.status === 'connected' ? ' · yetkilendirme tamamlandı' : ''}
+      </p>
+      {meta.hasRefreshToken ? null : (
+        <p className="mt-1">Yenileme anahtarı YOK — süre dolunca yeniden bağlanmalısınız.</p>
+      )}
+      {sandboxNote}
+      {meta.expiringSoon ? (
+        <p className="mt-1 font-medium">
+          Yenileme anahtarı ~{meta.daysLeft} gün içinde geçersiz olacak — yeniden yetkilendirin.
+          (Normalde günlük tazeleme görevi bunu kendisi yapar; bu uyarı görünüyorsa görev
+          çalışmıyor demektir — loglarda <code className="rounded-xs bg-paper px-1 font-mono">[cron] Pinterest token</code> satırlarına bakın.)
+        </p>
+      ) : null}
+      <PinterestBoardPicker
+        boards={boards}
+        initialSelectedId={meta.boardId}
+        loadError={boardsError}
+        sandbox={sandbox}
+      />
+    </Alert>
   );
 }

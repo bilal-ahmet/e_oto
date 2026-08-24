@@ -7,8 +7,7 @@
  * Bu kart bağlantıyı görünür kılar ve tek tıkla yetkilendirme verir.
  */
 
-import Link from 'next/link';
-import { Card } from '@/components/ui';
+import { Alert, LinkButton } from '@/components/ui';
 import { getOAuthTokenMeta } from '@/lib/db/queries';
 
 function fmt(d: Date | null): string {
@@ -34,72 +33,53 @@ async function loadStatus() {
 export async function EtsyConnection({ callbackResult }: { callbackResult?: { status?: string; reason?: string } }) {
   const meta = await loadStatus();
 
+  // prefetch={false} ŞART: OAuth başlatma route'u prefetch EDİLMEMELİ (her prefetch
+  // yeni bir PKCE verifier üretip cookie'yi ezerdi).
   const connectButton = (
-    <Link
-      href="/api/auth/etsy/start"
-      prefetch={false}
-      className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
-    >
+    <LinkButton href="/api/auth/etsy/start" prefetch={false} variant="secondary" size="sm">
       {meta.connected ? 'Yeniden yetkilendir' : "Etsy'ye bağlan"}
-    </Link>
+    </LinkButton>
   );
 
   if (callbackResult?.status === 'error') {
     return (
-      <Card className="mb-6 border-red-200 bg-red-50">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-red-800">Etsy yetkilendirmesi başarısız</p>
-            <p className="mt-1 break-words text-sm text-red-700">{callbackResult.reason ?? 'Bilinmeyen sebep.'}</p>
-          </div>
-          {connectButton}
-        </div>
-      </Card>
+      <Alert tone="danger" title="Etsy yetkilendirmesi başarısız" action={connectButton} className="mb-6">
+        <span className="break-words">{callbackResult.reason ?? 'Bilinmeyen sebep.'}</span>
+      </Alert>
     );
   }
 
   if (!meta.connected) {
     return (
-      <Card className="mb-6 border-amber-200 bg-amber-50">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-amber-900">Etsy bağlı değil</p>
-            <p className="mt-1 text-sm text-amber-800">
-              Yayın adımı çalışmaz. Üretime başlamadan önce bağlanın — aksi halde hattın sonunda
-              (mockup ve dosyalar üretildikten sonra) hata alırsınız.
-            </p>
-          </div>
-          {connectButton}
-        </div>
-      </Card>
+      <Alert tone="warning" title="Etsy bağlı değil" action={connectButton} className="mb-6">
+        Yayın adımı çalışmaz. Üretime başlamadan önce bağlanın — aksi halde hattın sonunda
+        (mockup ve dosyalar üretildikten sonra) hata alırsınız.
+      </Alert>
     );
   }
 
   return (
-    <Card className={`mb-6 ${meta.expiringSoon ? 'border-amber-200 bg-amber-50' : ''}`}>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-zinc-900">
-            <span className="mr-2 inline-block size-2 rounded-full bg-green-500 align-middle" aria-hidden />
-            Etsy bağlı
-            {callbackResult?.status === 'connected' ? (
-              <span className="ml-2 text-green-700">— yetkilendirme tamamlandı</span>
-            ) : null}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            Son yetkilendirme: {fmt(meta.updatedAt)} · Erişim anahtarı geçerlilik: {fmt(meta.expiresAt)}
-            {meta.hasRefreshToken ? '' : ' · yenileme anahtarı YOK (süre dolunca yeniden bağlanmalısınız)'}
-          </p>
-          {meta.expiringSoon ? (
-            <p className="mt-1 text-sm font-medium text-amber-800">
-              Yenileme anahtarı ~{meta.daysLeft} gün içinde geçersiz olacak — yeniden yetkilendirin.
-              (Normalde günlük tazeleme görevi bunu kendisi yapar; bu uyarı görünüyorsa görev
-              çalışmıyor demektir — sunucu loglarında <code>[cron] Etsy token</code> satırlarına bakın.)
-            </p>
-          ) : null}
-        </div>
-        {connectButton}
-      </div>
-    </Card>
+    <Alert
+      tone={meta.expiringSoon ? 'warning' : 'info'}
+      title="Etsy bağlı"
+      action={connectButton}
+      className="mb-6"
+    >
+      <p className="font-mono text-label uppercase tracking-label">
+        <span className="mr-2 inline-block size-1.5 rounded-full bg-state-done-ink align-middle" aria-hidden />
+        Son yetkilendirme: {fmt(meta.updatedAt)} · Geçerlilik: {fmt(meta.expiresAt)}
+        {callbackResult?.status === 'connected' ? ' · yetkilendirme tamamlandı' : ''}
+      </p>
+      {meta.hasRefreshToken ? null : (
+        <p className="mt-1">Yenileme anahtarı YOK — süre dolunca yeniden bağlanmalısınız.</p>
+      )}
+      {meta.expiringSoon ? (
+        <p className="mt-1 font-medium">
+          Yenileme anahtarı ~{meta.daysLeft} gün içinde geçersiz olacak — yeniden yetkilendirin.
+          (Normalde günlük tazeleme görevi bunu kendisi yapar; bu uyarı görünüyorsa görev
+          çalışmıyor demektir — sunucu loglarında <code className="rounded-xs bg-paper px-1 font-mono">[cron] Etsy token</code> satırlarına bakın.)
+        </p>
+      ) : null}
+    </Alert>
   );
 }

@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 import type { PinterestBoard } from '@/lib/pinterest/boards';
 
 /**
@@ -125,34 +125,36 @@ export function PinterestBoardPicker({
 
   const createForm = (
     <div className="mt-2 flex flex-wrap items-center gap-2">
-      <input
+      {/* Bu girdi eskiden elle stillendirilmişti ve ODAK STİLİ YOKTU — Input primitifi
+          hem görünümü hem globals.css'teki odak halkasını beraberinde getiriyor. */}
+      <Input
         value={newName}
         onChange={(e) => setNewName(e.target.value)}
         placeholder="Board adı (örn. Wall Art Prints)"
         disabled={saving}
-        className="w-64 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+        className="w-64"
       />
-      <Button onClick={() => void create()} disabled={saving || !newName.trim()} className="px-3 py-1.5">
+      <Button onClick={() => void create()} disabled={saving || !newName.trim()} size="sm">
         {saving ? 'Oluşturuluyor…' : 'Board oluştur'}
       </Button>
     </div>
   );
 
   if (loadError) {
-    return <p className="mt-3 text-sm text-red-700">Board listesi alınamadı: {loadError}</p>;
+    return <p className="mt-3 text-sm text-state-error-ink">Board listesi alınamadı: {loadError}</p>;
   }
 
   if (boards.length === 0) {
     return (
       <div className="mt-3">
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-state-turn-ink">
           {sandbox
             ? // Sandbox'ta board API'siz yaratılamaz; kullanıcı pinterest.com'da board açıp
               // burada neden görünmediğini anlamaya çalışarak vakit kaybetmesin.
               'Sandbox hesabında board yok. Sandbox’ın board’ları pinterest.com’dakilerden ayrıdır — orada açtığınız board burada GÖRÜNMEZ; aşağıdan oluşturun.'
             : 'Hesapta hiç board yok — aşağıdan oluşturun veya Pinterest’te açıp sayfayı yenileyin.'}
         </p>
-        {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="mt-1 text-sm text-state-error-ink">{error}</p> : null}
         {createForm}
       </div>
     );
@@ -160,8 +162,8 @@ export function PinterestBoardPicker({
 
   return (
     <div className="mt-3">
-      <p className="text-sm font-medium text-zinc-700">Pin atılacak board</p>
-      {error ? <p className="mt-1 text-sm text-red-700">{error}</p> : null}
+      <p className="text-sm font-medium text-ink">Pin atılacak board</p>
+      {error ? <p className="mt-1 text-sm text-state-error-ink">{error}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
         {boards.map((b) => {
           const active = b.id === selectedId;
@@ -173,19 +175,20 @@ export function PinterestBoardPicker({
                 variant={active ? 'primary' : 'ghost'}
                 disabled={saving}
                 onClick={() => void select(b.id)}
-                className="px-3 py-1.5"
+                size="sm"
               >
                 {active ? '✓ ' : ''}
                 {b.name}
                 {b.privacy !== 'PUBLIC' ? (
-                  <span className={active ? 'text-rose-100' : 'text-zinc-400'}>(gizli)</span>
+                  <span className={active ? 'text-paper/70' : 'text-ink-faint'}>(gizli)</span>
                 ) : null}
               </Button>
               <Button
                 variant="danger"
                 disabled={saving}
                 onClick={() => void remove(b)}
-                className="px-2 py-1.5"
+                size="sm"
+                className="px-2"
                 title={`"${b.name}" board'unu sil`}
                 aria-label={`"${b.name}" board'unu sil`}
               >
@@ -196,7 +199,7 @@ export function PinterestBoardPicker({
         })}
       </div>
       {!selectedId ? (
-        <p className="mt-2 text-sm text-amber-800">Henüz board seçilmedi — seçmeden pin atılamaz.</p>
+        <p className="mt-2 text-sm text-state-turn-ink">Henüz board seçilmedi — seçmeden pin atılamaz.</p>
       ) : null}
       {createForm}
     </div>
