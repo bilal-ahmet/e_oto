@@ -139,7 +139,7 @@ export default async function DashboardPage({
             </Link>
           </div>
 
-          <Card className="p-0">
+          <Card padded={false}>
             {runs.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-zinc-400">Henüz çalıştırma yok.</p>
             ) : (
@@ -216,7 +216,7 @@ export default async function DashboardPage({
               Tümü →
             </Link>
           </div>
-          <Card className="p-0">
+          <Card padded={false}>
             {topCompetitors.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-zinc-400">Henüz rakip taraması yok.</p>
             ) : (

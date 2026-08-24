@@ -152,7 +152,7 @@ export default function CompetitorsPage() {
         <span className="text-sm text-zinc-500">{rows.length} ürün</span>
       </div>
 
-      <Card className="overflow-x-auto p-0">
+      <Card padded={false} className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
