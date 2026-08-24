@@ -16,7 +16,31 @@ import { STATUS_META } from '@/lib/status';
 // Her istekte taze veri (DB'den).
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 30;
+// Sayfa başına kayıt. Toplamda sınır YOK — sayfalama tüm geçmişi kapsar (bkz. countPipelineRuns).
+const PAGE_SIZE = 10;
+
+/**
+ * Sayfalama çubuğunda gösterilecek numaralar. Sayfa sayısı çoğaldığında hepsini basmak yerine
+ * ilk/son + geçerli sayfanın etrafındaki pencere gösterilir, aradaki boşluklar 'gap' olur:
+ *   1 … 4 [5] 6 … 20
+ */
+function pageNumbers(current: number, count: number): (number | 'gap')[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
+  const around = new Set([1, count, current, current - 1, current + 1]);
+  // Baş/son sınırdayken pencere daralmasın — hep aynı sayıda slot görünsün.
+  if (current <= 3) [2, 3, 4].forEach((n) => around.add(n));
+  if (current >= count - 2) [count - 3, count - 2, count - 1].forEach((n) => around.add(n));
+
+  const sorted = [...around].filter((n) => n >= 1 && n <= count).sort((a, b) => a - b);
+  const out: (number | 'gap')[] = [];
+  let prev = 0;
+  for (const n of sorted) {
+    if (prev && n - prev > 1) out.push('gap');
+    out.push(n);
+    prev = n;
+  }
+  return out;
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('tr-TR', {
@@ -148,7 +172,7 @@ export default async function DashboardPage({
                   })}
                 </ul>
 
-                <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-zinc-100 px-5 py-3">
                   <span className="text-xs text-zinc-400">
                     {offset + 1}–{offset + runs.length} / {total} kayıt
                   </span>
@@ -156,9 +180,17 @@ export default async function DashboardPage({
                     <PageLink href={`/admin?p=${page - 1}`} disabled={page <= 1}>
                       ← Önceki
                     </PageLink>
-                    <span className="px-2 text-xs text-zinc-500">
-                      {page} / {pageCount}
-                    </span>
+                    {pageNumbers(page, pageCount).map((n, i) =>
+                      n === 'gap' ? (
+                        <span key={`gap-${i}`} className="px-1 text-xs text-zinc-300">
+                          …
+                        </span>
+                      ) : (
+                        <PageLink key={n} href={`/admin?p=${n}`} disabled={n === page} current={n === page}>
+                          {n}
+                        </PageLink>
+                      ),
+                    )}
                     <PageLink href={`/admin?p=${page + 1}`} disabled={page >= pageCount}>
                       Sonraki →
                     </PageLink>
@@ -210,19 +242,28 @@ export default async function DashboardPage({
   );
 }
 
-/** Sayfalama oku — sınırdayken tıklanamaz (link yerine düz metin) olur. */
+/**
+ * Sayfalama düğmesi — sınırdaki ok ve bulunulan sayfa tıklanamaz (link yerine düz metin) olur.
+ * `current` yalnızca görünümü değiştirir: bulunulan sayfa soluk değil, vurgulu gösterilir.
+ */
 function PageLink({
   href,
   disabled,
+  current = false,
   children,
 }: {
   href: string;
   disabled: boolean;
+  current?: boolean;
   children: React.ReactNode;
 }) {
   const base = 'rounded-md px-2.5 py-1 text-xs font-medium';
   if (disabled) {
-    return <span className={`${base} text-zinc-300`}>{children}</span>;
+    return (
+      <span className={`${base} ${current ? 'bg-rose-600 text-white' : 'text-zinc-300'}`}>
+        {children}
+      </span>
+    );
   }
   return (
     <Link href={href} className={`${base} text-zinc-600 transition-colors hover:bg-zinc-100`}>
