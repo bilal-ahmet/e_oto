@@ -33,8 +33,10 @@ envs:
   - key: TOKEN_ENCRYPTION_KEY
     scope: RUN_TIME
     type: SECRET
-  # Panel koruması (/admin). İkisi de boşsa boot durur (lib/env.ts → assertProdEnv) —
-  # korumasız canlı bir panel sessiz zarardır. Değerleri `npm run auth:hash` üretir.
+  # Panel koruması (/admin). Değerleri `npm run auth:hash` üretir; ikisini de DO panelinde
+  # SECRET olarak girin (spec'te değer YAZMAYIN). Boşsa uygulama açılır ama /admin kilitli
+  # kalır ve boot log'u 'PANEL KİLİTLİ' der — BİLEREK boot'u durdurmuyoruz: health check
+  # düşerse App Platform deploy'u geri alır ve canlıda korumasız ESKİ sürüm kalır.
   - key: AUTH_SECRET
     scope: RUN_TIME
     type: SECRET

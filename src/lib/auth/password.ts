@@ -1,10 +1,16 @@
 /**
  * Panel parolası — scrypt ile doğrulama.
  *
- * ADMIN_PASSWORD_HASH biçimi: `scrypt$<saltHex>$<hashHex>`
+ * ADMIN_PASSWORD_HASH biçimi: `scrypt:<saltHex>:<hashHex>`
  * Üretmek için: `npm run auth:hash` (scripts/hash-password.ts).
  *
  * Düz parola ASLA env'de tutulmaz: App Platform panelinde ve log'larda görünür hale gelir.
+ *
+ * AYRAÇ ':' — '$' DEĞİL, ve bu geri alınamaz bir karar değil, ölçülmüş bir zorunluluk:
+ * Next.js env dosyalarını dotenv-expand ile okur ve '$' sonrasını DEĞİŞKEN REFERANSI sayar.
+ * `.env.local`'deki `scrypt$<salt>$<hash>` değeri process.env'e sadece "scrypt" olarak
+ * ulaşıyordu (ölçüldü) — yani lokalde doğru parola bile sessizce "Parola hatalı" veriyordu.
+ * Ayraç değiştirilecekse '$' dışında bir şey seçin.
  */
 
 import { scrypt, timingSafeEqual } from 'node:crypto';
@@ -27,10 +33,10 @@ function derive(password: string, salt: Buffer): Promise<Buffer> {
   });
 }
 
-/** `scrypt$<saltHex>$<hashHex>` üretir — yalnızca scripts/hash-password.ts kullanır. */
+/** `scrypt:<saltHex>:<hashHex>` üretir — yalnızca scripts/hash-password.ts kullanır. */
 export async function hashPassword(password: string, salt: Buffer): Promise<string> {
   const key = await derive(password, salt);
-  return `${HASH_PREFIX}$${salt.toString('hex')}$${key.toString('hex')}`;
+  return `${HASH_PREFIX}:${salt.toString('hex')}:${key.toString('hex')}`;
 }
 
 /**
@@ -41,7 +47,7 @@ export async function verifyPassword(password: string): Promise<boolean> {
   const stored = process.env.ADMIN_PASSWORD_HASH;
   if (!stored) return false;
 
-  const parts = stored.split('$');
+  const parts = stored.split(':');
   if (parts.length !== 3 || parts[0] !== HASH_PREFIX) return false;
   const [, saltHex, hashHex] = parts;
 

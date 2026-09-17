@@ -88,10 +88,18 @@ export function assertProdEnv(): void {
   const e = getEnv();
 
   // ── Panel koruması ────────────────────────────────────────────────────────────
-  // Spaces kontrolüyle AYNI sertlikte: bu ikisi yoksa /admin fail-closed davranır
-  // (lib/auth/session.ts) ve panel kimse için açılmaz — yani uygulama zaten kullanılamaz
-  // durumdadır. Boot'u burada durdurmak, "panelim neden giriş yaptırmıyor / hiç açılmıyor"
-  // diye bir deploy turu harcamaktan iyidir.
+  // BURADA FIRLATMAK YASAK — yüksek sesle uyar, boot'u sürdür.
+  //
+  // NEDEN (ölçülmüş): bu kontrol eskiden `throw` ediyordu. Değişkenler DO'da girilmeden
+  // yapılan ilk deploy'da instrumentation hook'u patladı → /api/health 500 → App Platform
+  // "failed health checks" ile deploy'u GERİ ALDI → canlıda KORUMASIZ eski sürüm kaldı.
+  // Yani sert kontrol, tam da engellemek istediği şeyi üretti. Üstelik vitrin sitesini
+  // (/, /privacy — Pinterest'in zorunlu tuttuğu gizlilik sayfası dahil) da yere indirdi.
+  //
+  // Uyarı yeterli çünkü GÜVENLİK AÇIĞI OLUŞMUYOR: değişkenler yoksa verifySession daima
+  // false döner (lib/auth/session.ts fail-closed) → /admin kimseye açılmaz, /login de eksik
+  // değişkeni adıyla gösterir. Sonuç: vitrin ayakta, panel kilitli, sebep ekranda.
+  //
   // NOT: Bu ikisi BİLEREK yukarıdaki zod şemasında değil — session.ts/password.ts proxy
   // içinden çalışır ve tüm şemayı (dolayısıyla DATABASE_URL'i) tetiklememelidir.
   const missingAuth = (
@@ -104,10 +112,10 @@ export function assertProdEnv(): void {
     .map(([name]) => name);
 
   if (missingAuth.length > 0) {
-    throw new Error(
-      `Üretimde panel koruması yapılandırılmamış: ${missingAuth.join(', ')} boş. ` +
+    console.error(
+      `[env] PANEL KİLİTLİ: ${missingAuth.join(', ')} boş — /admin hiç kimseye açılmayacak. ` +
         '`npm run auth:hash` ile üretip DO panelinde App → Settings → Environment Variables ' +
-        'altında SECRET olarak girin.',
+        'altında SECRET (scope: RUN_TIME) olarak girin.',
     );
   }
 
