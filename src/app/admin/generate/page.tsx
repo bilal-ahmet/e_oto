@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import type { ImageDraft, ImageModel, PinCopy, PipelineRun, ProductType, SeoData } from '@/types';
 import { Alert, Button, Card, EmptyState, FRAMED_IMG, Framed, LinkButton, PageHeader, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 import {
   PRODUCT_OPTIONS,
   WORKING,
@@ -69,7 +70,7 @@ export default function GeneratePage() {
       let failures = 0;
       const tick = async () => {
         try {
-          const res = await fetch(`/api/pipeline/status/${id}`);
+          const res = await apiFetch(`/api/pipeline/status/${id}`);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data: PipelineRun = await res.json();
           failures = 0;
@@ -100,7 +101,7 @@ export default function GeneratePage() {
   // ── Taslaklar (kaydedilmiş görseller) ──────────────────────────────────────
   const loadDrafts = useCallback(async () => {
     try {
-      const res = await fetch('/api/drafts');
+      const res = await apiFetch('/api/drafts');
       if (!res.ok) return;
       const data: { drafts?: ImageDraft[] } = await res.json();
       setDrafts(data.drafts ?? []);
@@ -113,7 +114,7 @@ export default function GeneratePage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/drafts');
+        const res = await apiFetch('/api/drafts');
         if (!res.ok || !active) return;
         const data: { drafts?: ImageDraft[] } = await res.json();
         if (active) setDrafts(data.drafts ?? []);
@@ -133,7 +134,7 @@ export default function GeneratePage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/auth/etsy/status');
+        const res = await apiFetch('/api/auth/etsy/status');
         if (!res.ok || !active) return;
         const data: { connected?: boolean } = await res.json();
         if (active) setEtsyConnected(Boolean(data.connected));
@@ -154,7 +155,7 @@ export default function GeneratePage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/pipeline/from-draft', {
+        const res = await apiFetch('/api/pipeline/from-draft', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ draftId }),
@@ -180,7 +181,7 @@ export default function GeneratePage() {
   async function saveVariation(index: number, url: string) {
     setError(null);
     try {
-      const res = await fetch('/api/drafts', {
+      const res = await apiFetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ variationUrl: url, prompt: run?.prompt }),
@@ -202,7 +203,7 @@ export default function GeneratePage() {
     setError(null);
     try {
       const upload = await fileToBase64(file);
-      const res = await fetch('/api/drafts', {
+      const res = await apiFetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload }),
@@ -224,7 +225,7 @@ export default function GeneratePage() {
     setDraftBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/pipeline/from-draft', {
+      const res = await apiFetch('/api/pipeline/from-draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftId, competitorResearchId: research?.id }),
@@ -243,7 +244,7 @@ export default function GeneratePage() {
   async function deleteDraft(id: string) {
     setDraftBusy(true);
     try {
-      await fetch(`/api/drafts/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/drafts/${id}`, { method: 'DELETE' });
       loadDrafts();
     } finally {
       setDraftBusy(false);
@@ -279,7 +280,7 @@ export default function GeneratePage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/pipeline/resume', {
+      const res = await apiFetch('/api/pipeline/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: run.id }),
@@ -287,7 +288,7 @@ export default function GeneratePage() {
       const data = await readJson<{ status?: string; error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? 'Run sürdürülemedi.');
       // Yeni durumu (ve varsa güncel alanları) tek sorguda çek.
-      const fresh = await fetch(`/api/pipeline/status/${run.id}`);
+      const fresh = await apiFetch(`/api/pipeline/status/${run.id}`);
       if (fresh.ok) setRun(await fresh.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Run sürdürülemedi.');
@@ -325,7 +326,7 @@ export default function GeneratePage() {
     setError(null);
     try {
       const referenceImage = await fileToBase64(referenceFile);
-      const res = await fetch('/api/instruction/generate', {
+      const res = await apiFetch('/api/instruction/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ referenceImage, note: note.trim() || undefined }),
@@ -346,7 +347,7 @@ export default function GeneratePage() {
     setError(null);
     try {
       const referenceImage = referenceFile ? await fileToBase64(referenceFile) : undefined;
-      const res = await fetch('/api/pipeline/generate', {
+      const res = await apiFetch('/api/pipeline/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -375,7 +376,7 @@ export default function GeneratePage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(path, {
+      const res = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: run.id, ...payload }),
@@ -406,7 +407,7 @@ export default function GeneratePage() {
     setRegenIndex(index);
     setError(null);
     try {
-      const res = await fetch('/api/pipeline/regenerate-mockup', {
+      const res = await apiFetch('/api/pipeline/regenerate-mockup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: run.id, index }),
@@ -418,7 +419,7 @@ export default function GeneratePage() {
       // fal kontext kuyruğu bazen ~2dk sürebilir; geniş tut (~5dk).
       for (let i = 0; i < 120; i++) {
         await new Promise((r) => setTimeout(r, 2500));
-        const s = await fetch(`/api/pipeline/status/${run.id}`);
+        const s = await apiFetch(`/api/pipeline/status/${run.id}`);
         if (!s.ok) continue;
         const data: PipelineRun = await s.json();
         if (data.status === 'error') {
@@ -443,7 +444,7 @@ export default function GeneratePage() {
     if (!run) return;
     setBusy(true);
     try {
-      await fetch('/api/pipeline/reject', {
+      await apiFetch('/api/pipeline/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: run.id }),

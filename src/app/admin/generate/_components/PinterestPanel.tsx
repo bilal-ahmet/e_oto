@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { PinCopy } from '@/types';
 import { Button, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 import { readJson } from './shared';
 import { LabeledField } from './LabeledField';
 
@@ -30,7 +31,7 @@ export function PinterestPanel({
     setError(null);
     setWarning(null);
     try {
-      const res = await fetch('/api/pipeline/pin-copy', {
+      const res = await apiFetch('/api/pipeline/pin-copy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: runId }),

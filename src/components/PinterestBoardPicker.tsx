@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 import type { PinterestBoard } from '@/lib/pinterest/boards';
 
 /**
@@ -59,7 +60,7 @@ export function PinterestBoardPicker({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/pinterest/boards', {
+      const res = await apiFetch('/api/auth/pinterest/boards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ boardId }),
@@ -84,7 +85,7 @@ export function PinterestBoardPicker({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/auth/pinterest/boards?boardId=${encodeURIComponent(board.id)}`, {
+      const res = await apiFetch(`/api/auth/pinterest/boards?boardId=${encodeURIComponent(board.id)}`, {
         method: 'DELETE',
       });
       await readJson(res, 'Board silinemedi.');
@@ -107,7 +108,7 @@ export function PinterestBoardPicker({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/pinterest/boards', {
+      const res = await apiFetch('/api/auth/pinterest/boards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),

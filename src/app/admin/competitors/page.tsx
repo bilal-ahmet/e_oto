@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CompetitorListing, CompetitorShop } from '@/types';
 import { Alert, Button, Card, EmptyState, Input, PageHeader, Select, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 
 type SortKey = keyof Pick<
   CompetitorListing,
@@ -32,7 +33,7 @@ export default function CompetitorsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/competitors');
+      const res = await apiFetch('/api/competitors');
       if (res.ok) {
         const data: { shops: CompetitorShop[]; listings: CompetitorListing[] } = await res.json();
         setShops(data.shops);
@@ -51,7 +52,7 @@ export default function CompetitorsPage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/competitors');
+        const res = await apiFetch('/api/competitors');
         if (!res.ok || !active) return;
         const data: { shops: CompetitorShop[]; listings: CompetitorListing[] } = await res.json();
         if (!active) return;
@@ -97,7 +98,7 @@ export default function CompetitorsPage() {
     setError(null);
     try {
       const isId = /^\d+$/.test(value);
-      const res = await fetch('/api/competitors/scan', {
+      const res = await apiFetch('/api/competitors/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(isId ? { shopId: Number(value) } : { shopName: value }),

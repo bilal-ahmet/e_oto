@@ -59,12 +59,28 @@ export function Nav() {
           })}
         </nav>
 
-        <Link
-          href="/"
-          className="shrink-0 rounded-full border border-ink px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
-        >
-          Mağaza sitesi
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/"
+            className="rounded-full border border-ink px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
+          >
+            Mağaza sitesi
+          </Link>
+
+          {/*
+            Düz form + POST: JS olmadan da çalışır ve çıkış çerezi SUNUCUDA silinir.
+            GET bağlantısı olsaydı tarayıcı/proxy önbelleği ya da link ön-getirme oturumu
+            istemeden kapatabilirdi.
+          */}
+          <form action="/api/auth/logout" method="post">
+            <button
+              type="submit"
+              className="rounded-full border border-sand bg-sheet px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink-muted transition-colors hover:border-ink hover:text-ink"
+            >
+              Çıkış
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );

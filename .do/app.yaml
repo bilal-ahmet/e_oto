@@ -33,6 +33,14 @@ envs:
   - key: TOKEN_ENCRYPTION_KEY
     scope: RUN_TIME
     type: SECRET
+  # Panel koruması (/admin). İkisi de boşsa boot durur (lib/env.ts → assertProdEnv) —
+  # korumasız canlı bir panel sessiz zarardır. Değerleri `npm run auth:hash` üretir.
+  - key: AUTH_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: ADMIN_PASSWORD_HASH
+    scope: RUN_TIME
+    type: SECRET
   - key: ANTHROPIC_API_KEY
     scope: RUN_TIME
     type: SECRET

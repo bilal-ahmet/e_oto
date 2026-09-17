@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Alert, Button, Input, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 import { type CompetitorAnalysis } from './shared';
 
 export function CompetitorResearchPanel({
@@ -22,7 +23,7 @@ export function CompetitorResearchPanel({
     setAnalyzing(true);
     setErr(null);
     try {
-      const res = await fetch('/api/competitor-research/analyze', {
+      const res = await apiFetch('/api/competitor-research/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.trim() }),

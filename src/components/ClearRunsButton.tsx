@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 
 /**
  * "Geçmişi temizle" — tüm pipeline kayıtlarını ve depodaki dosyalarını siler.
@@ -20,7 +21,7 @@ export function ClearRunsButton({ total, active }: { total: number; active: numb
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/pipeline/runs', { method: 'DELETE' });
+      const res = await apiFetch('/api/pipeline/runs', { method: 'DELETE' });
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error ?? `Temizlenemedi (HTTP ${res.status}).`);

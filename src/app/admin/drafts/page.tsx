@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ImageDraft } from '@/types';
 import { Alert, Button, EmptyState, FRAMED_IMG, Framed, PageHeader, Spinner, buttonClasses } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 
 /**
  * Dosyayı base64'e çevirir. FileReader kullanılır — elle byte döngüsü büyük görsellerde ana
@@ -36,7 +37,7 @@ export default function DraftsPage() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/drafts');
+        const res = await apiFetch('/api/drafts');
         if (!res.ok || !active) return;
         const data: { drafts?: ImageDraft[] } = await res.json();
         if (active) setDrafts(data.drafts ?? []);
@@ -51,7 +52,7 @@ export default function DraftsPage() {
 
   async function refresh() {
     try {
-      const res = await fetch('/api/drafts');
+      const res = await apiFetch('/api/drafts');
       if (!res.ok) return;
       const data: { drafts?: ImageDraft[] } = await res.json();
       setDrafts(data.drafts ?? []);
@@ -65,7 +66,7 @@ export default function DraftsPage() {
     setError(null);
     try {
       const upload = await fileToBase64(file);
-      const res = await fetch('/api/drafts', {
+      const res = await apiFetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload }),
@@ -85,7 +86,7 @@ export default function DraftsPage() {
   async function deleteDraft(id: string) {
     setBusy(true);
     try {
-      await fetch(`/api/drafts/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/drafts/${id}`, { method: 'DELETE' });
       await refresh();
     } finally {
       setBusy(false);

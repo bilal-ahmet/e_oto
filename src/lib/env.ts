@@ -87,6 +87,30 @@ export function assertProdEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
   const e = getEnv();
 
+  // ── Panel koruması ────────────────────────────────────────────────────────────
+  // Spaces kontrolüyle AYNI sertlikte: bu ikisi yoksa /admin fail-closed davranır
+  // (lib/auth/session.ts) ve panel kimse için açılmaz — yani uygulama zaten kullanılamaz
+  // durumdadır. Boot'u burada durdurmak, "panelim neden giriş yaptırmıyor / hiç açılmıyor"
+  // diye bir deploy turu harcamaktan iyidir.
+  // NOT: Bu ikisi BİLEREK yukarıdaki zod şemasında değil — session.ts/password.ts proxy
+  // içinden çalışır ve tüm şemayı (dolayısıyla DATABASE_URL'i) tetiklememelidir.
+  const missingAuth = (
+    [
+      ['AUTH_SECRET', process.env.AUTH_SECRET],
+      ['ADMIN_PASSWORD_HASH', process.env.ADMIN_PASSWORD_HASH],
+    ] as const
+  )
+    .filter(([, val]) => !val)
+    .map(([name]) => name);
+
+  if (missingAuth.length > 0) {
+    throw new Error(
+      `Üretimde panel koruması yapılandırılmamış: ${missingAuth.join(', ')} boş. ` +
+        '`npm run auth:hash` ile üretip DO panelinde App → Settings → Environment Variables ' +
+        'altında SECRET olarak girin.',
+    );
+  }
+
   // EKSİK OLANLARI ADIYLA bildir — "DO_SPACES_* eksik" demek, beşinden hangisinin boş
   // olduğunu aramak için bir deploy turu daha harcatır.
   const missingSpaces = (

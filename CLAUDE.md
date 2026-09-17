@@ -48,6 +48,7 @@ kaydı (journal'a girmeyen migration çalışmaz), sonra `npm run db:migrate`.
 | Pipeline orkestrasyonu | `src/lib/pipeline/run.ts` |
 | Durum etiketleri/sırası | `src/lib/status.ts` |
 | Ürün tipi farkları | `src/lib/product/config.ts` |
+| Panel girişi / koruma | `src/proxy.ts` · `src/lib/auth/` · `src/app/(auth)/login` |
 
 ## Her zaman geçerli kod kuralları
 
@@ -65,6 +66,10 @@ kaydı (journal'a girmeyen migration çalışmaz), sonra `npm run db:migrate`.
 7. **Token'lar AES-256-GCM ile şifreli** saklanır; anahtar/secret asla commit edilmez.
 8. **Next.js sürüm kuralları `AGENTS.md`'de** (üretici tarafından yönetilen blok) — kod yazmadan
    önce oku. O kuralı buraya kopyalama, kopya eskir.
+9. **`/admin` + `/api` oturum ister** (`src/proxy.ts`; Next 16'da dosya adı `middleware.ts` DEĞİL).
+   `PUBLIC_API_PATHS`'e ekleme yapma — her satır kapatılmamış bir kapıdır; OAuth callback'leri ve
+   `/api/health` orada kalmak ZORUNDA. Panelden istek `@/lib/client/api` → `apiFetch` ile atılır
+   (ham `fetch` 401'de kullanıcıyı girişe götürmez). Yetki eksikse daima reddedilir (fail-closed).
 
 ## Alan bilgisi — `.claude/skills/`
 
