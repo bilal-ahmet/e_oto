@@ -11,7 +11,7 @@ export function PipelineWarnings({ run }: { run: PipelineRun }) {
   const warnings = run.publishProgress?.warnings ?? [];
   if (warnings.length === 0) return null;
   return (
-    <div className="mt-4 rounded-xs border-l-2 border-l-gold bg-state-turn px-4 py-3">
+    <div className="mt-4 rounded-md border-l-4 border-l-gold bg-state-turn px-4 py-3">
       <p className="text-sm font-medium text-state-turn-ink">Dikkat edilmesi gerekenler</p>
       <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-state-turn-ink">
         {warnings.map((w) => (

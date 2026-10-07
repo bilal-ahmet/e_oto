@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ImageDraft } from '@/types';
-import { Alert, Button, EmptyState, FRAMED_IMG, Framed, PageHeader, Spinner, buttonClasses } from '@/components/ui';
+import { Alert, Button, Card, EmptyState, FRAMED_IMG, Framed, PageHeader, Spinner, buttonClasses } from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
 
 /**
@@ -111,20 +111,23 @@ export default function DraftsPage() {
         </Alert>
       ) : null}
 
-      {/* Galeri bandı — marka sitesindeki galeri şeridiyle aynı okuma: kâğıt zeminden
-          bir ton koyu, kapsayıcının kenarına kadar uzanan bir bant. */}
-      <div className="-mx-4 border-y border-sand bg-shade px-4 py-6 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-label uppercase tracking-label tabular-nums text-ink-muted">
-            {drafts.length} taslak
-          </p>
-          <label className={`${buttonClasses({ variant: 'ghost', size: 'sm' })} cursor-pointer`}>
+          <p className="text-sm font-medium tabular-nums text-ink-muted">{drafts.length} taslak</p>
+          {/* Input `sr-only` (hidden DEĞİL): klavyeyle odaklanabilsin; halka label'da görünür. */}
+          <label
+            className={buttonClasses({
+              variant: 'ghost',
+              size: 'sm',
+              className: 'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-gold',
+            })}
+          >
             {busy ? <Spinner /> : null}
             Görsel yükle
             <input
               type="file"
               accept="image/*"
-              className="hidden"
+              className="sr-only"
               disabled={busy}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -164,7 +167,7 @@ export default function DraftsPage() {
                     disabled={busy}
                     title="Taslağı sil"
                     aria-label="Taslağı sil"
-                    className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-paper text-sm font-semibold text-ink-muted transition-colors hover:text-state-error-ink disabled:opacity-60"
+                    className="absolute right-1.5 top-1.5 grid size-8 cursor-pointer place-items-center rounded-full border border-sand bg-sheet text-lg leading-none text-ink-muted shadow-card transition-colors hover:border-state-error-ink hover:text-state-error-ink disabled:opacity-60"
                   >
                     ×
                   </button>
@@ -182,7 +185,7 @@ export default function DraftsPage() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

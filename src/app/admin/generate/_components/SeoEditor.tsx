@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import type { ProductType, SeoData } from '@/types';
-import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner, Textarea } from '@/components/ui';
+import { Button, Card, Chevron, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner, Textarea } from '@/components/ui';
 import { previewAspectClass } from './shared';
 
 export function SeoEditor({
@@ -75,9 +75,10 @@ export function SeoEditor({
           <details> kullanılıyor — state gerekmez, klavye desteği bedava.
         */}
         <div className="space-y-3">
-          <details open className="rounded-xs border border-sand bg-sheet">
-            <summary className="cursor-pointer px-4 py-3 font-mono text-label uppercase tracking-label text-ink">
+          <details open className="group rounded-lg border border-sand bg-sheet">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3.5 text-base font-semibold text-ink hover:bg-shade">
               Başlık &amp; açıklama
+              <Chevron />
             </summary>
             <div className="space-y-5 border-t border-sand px-4 py-4">
               <Field label="Başlık" htmlFor="seo-title" counter={{ value: titleLen, max: 140 }}>
@@ -100,12 +101,13 @@ export function SeoEditor({
             </div>
           </details>
 
-          <details open className="rounded-xs border border-sand bg-sheet">
-            <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-mono text-label uppercase tracking-label text-ink">
+          <details open className="group rounded-lg border border-sand bg-sheet">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3.5 text-base font-semibold text-ink hover:bg-shade">
               <span>Etiketler</span>
-              <span className="tabular-nums text-ink-faint">
+              <span className="text-sm font-normal tabular-nums text-ink-muted">
                 {seo.tags.length}/13 · {emptyTags} boş
               </span>
+              <Chevron className="ml-auto" />
             </summary>
             <div className="border-t border-sand px-4 py-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -118,7 +120,7 @@ export function SeoEditor({
                         maxLength={20}
                         aria-label={`Etiket ${i + 1}`}
                         onChange={(e) => setArrayItem('tags', i, e.target.value)}
-                        className={`px-2.5 py-1.5 ${dup ? 'border-gold' : ''}`}
+                        className={`px-2.5 py-1.5 ${dup ? 'border-gold bg-state-turn' : ''}`}
                       />
                       {/* maxLength vardı ama sayaç YOKTU — kullanıcı sınıra ne kadar
                           yaklaştığını göremiyordu. */}
@@ -138,20 +140,24 @@ export function SeoEditor({
                 })}
               </div>
               {duplicateTags.size > 0 ? (
-                <p className="mt-3 font-mono text-label uppercase tracking-label text-gold-deep">
-                  Altın çerçeveli etiketler yinelenmiş — Etsy tekrarları saymaz.
+                <p className="mt-3 text-sm font-medium text-gold-deep">
+                  Sarı zeminli etiketler yinelenmiş — Etsy tekrarları saymaz.
                 </p>
               ) : null}
             </div>
           </details>
 
-          <details className="rounded-xs border border-sand bg-sheet">
-            <summary className="cursor-pointer px-4 py-3 font-mono text-label uppercase tracking-label text-ink">
-              Materyaller &amp; öznitelikler
+          <details className="group rounded-lg border border-sand bg-sheet">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3.5 text-base font-semibold text-ink hover:bg-shade">
+              <span>
+                Materyaller &amp; öznitelikler 
+                <span className="text-sm font-normal text-ink-faint">(nadiren değişir)</span>
+              </span>
+              <Chevron />
             </summary>
             <div className="space-y-5 border-t border-sand px-4 py-4">
               <div>
-                <p className="text-sm font-medium text-ink">Materyaller ({seo.materials.length})</p>
+                <p className="text-sm font-semibold text-ink">Materyaller ({seo.materials.length})</p>
                 <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {seo.materials.map((m, i) => (
                     <Input
@@ -166,7 +172,7 @@ export function SeoEditor({
               </div>
 
               <div>
-                <p className="text-sm font-medium text-ink">
+                <p className="text-sm font-semibold text-ink">
                   Öznitelikler{' '}
                   <span className="font-normal text-ink-faint">
                     (kategori Digital Prints olarak otomatik yazılır)
@@ -175,7 +181,7 @@ export function SeoEditor({
                 <div className="mt-1.5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
                   {(['orientation', 'style', 'occasion', 'room', 'subject'] as const).map((k) => (
                     <div key={k}>
-                      <span className="font-mono text-label uppercase tracking-label text-ink-muted">
+                      <span className="text-sm font-medium capitalize text-ink-body">
                         {k}
                       </span>
                       <Input
@@ -196,7 +202,7 @@ export function SeoEditor({
       </div>
 
       {/* Eylemler yapışkan: 34 alanı kaydırırken onay butonu hep erişilebilir. */}
-      <div className="sticky bottom-0 -mx-5 -mb-5 mt-6 flex flex-wrap gap-3 border-t border-sand bg-shade px-5 py-4">
+      <div className="sticky bottom-0 -mx-5 -mb-5 mt-6 flex flex-wrap gap-3 rounded-b-lg border-t border-sand bg-shade/95 px-5 py-4 backdrop-blur-sm">
         <Button onClick={() => onApprove(seo)} disabled={busy}>
           {busy ? <Spinner /> : null}
           Onayla — medya &amp; dosyaları üret

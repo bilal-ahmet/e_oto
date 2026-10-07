@@ -2,12 +2,16 @@
 
 /* ────────────────────────────────────────────────────────────────────────────
    TASARIM TOKEN'LARI — Tailwind v4 CSS-first (tailwind.config.* YOK)
-   Panel, marka sitesinin (src/app/(marketing)/) kâğıt paletini paylaşır.
+   Panel AÇIK, beyaza yakın bir zemin kullanır (göz yormasın diye saf beyaz değil,
+   hafif sıcak kırık beyaz). Marka sitesi (src/app/(marketing)/) bu token'lara
+   bağlı DEĞİLDİR — kendi kâğıt rengini (#f1ece2) sabit hex ile tutar; burada
+   yapılan renk değişikliği onu etkilemez.
 
-   RENK KULLANIM KURALI: yorumdaki oranlar WCAG kontrastıdır, kâğıt zemine göre
-   ölçülmüştür. Metin için eşik 4.5, çizgi/işaret için 3.0.
-   `gold` kâğıtta 3.39 → METİN OLARAK KULLANILMAZ, yalnızca çizgi/odak/işaret.
-   Altın metin gerektiğinde `gold-deep` (5.09).
+   RENK KULLANIM KURALI: yorumdaki oranlar WCAG kontrastıdır, sayfa zeminine
+   (`paper`) göre hesaplanmıştır; kart (`sheet` = beyaz) üstünde hepsi biraz daha
+   yüksektir. Metin için eşik 4.5, çizgi/işaret/alan kenarı için 3.0.
+   `gold` METİN OLARAK KULLANILMAZ, yalnızca çizgi/odak/işaret.
+   Altın metin gerektiğinde `gold-deep`.
    ──────────────────────────────────────────────────────────────────────────── */
 
 @theme inline {
@@ -21,23 +25,25 @@
   böylece utility'nin yetmediği yerde `var(--color-sand)` ile aynı token'a erişilebilir.
 */
 @theme {
-  /* ── Yüzeyler (kâğıt) ───────────────────────────────────────────────────── */
-  --color-paper: #f1ece2; /* sayfa zemini + paspartu kenarı (marka sitesiyle aynı) */
-  --color-shade: #ebe4d5; /* ikincil bant, girintili panel, tablo başlığı */
-  --color-sheet: #faf8f3; /* kart yüzeyi — "masadaki sayfa", kâğıda göre 1.11 */
-  --color-sand: #ddd2ba; /* kenarlık */
-  --color-sand-soft: #e6dcc7; /* liste içi ince ayraç (divide-*) */
+  /* ── Yüzeyler ───────────────────────────────────────────────────────────── */
+  --color-paper: #f8f7f4; /* sayfa zemini + paspartu kenarı — sıcak kırık beyaz */
+  --color-shade: #f1efea; /* ikincil bant, girintili panel, tablo başlığı */
+  --color-sheet: #ffffff; /* kart + form alanı yüzeyi — zeminden bir ton açık */
+  --color-sand: #e3dfd6; /* kart/bölüm kenarlığı (dekoratif, kontrast şartı yok) */
+  --color-sand-soft: #ece9e3; /* liste içi ince ayraç (divide-*) */
+  /* Form alanı kenarı — beyaz üstünde ~3.3. Eskiden alanlar `sand` kenarlıydı (~1.4):
+     kutunun nerede başlayıp bittiği zor seçiliyordu. WCAG 1.4.11 alan sınırı için 3:1 ister. */
+  --color-field: #968d7e;
 
   /* ── Mürekkep (metin kademeleri) ────────────────────────────────────────── */
-  --color-ink: #241f1c; /* 13.85 — başlık + dolgu buton zemini */
-  --color-ink-body: #4a4238; /*  8.38 — gövde metni */
-  --color-ink-muted: #5c5347; /*  6.41 — ikincil metin */
-  --color-ink-faint: #6b6252; /*  5.10 — en silik metin.
-      Marka sitesindeki #7a715f (4.10) BİLEREK kullanılmıyor: AA'yı geçmiyor. */
+  --color-ink: #241f1c; /* ~15.3 — başlık + dolgu buton zemini */
+  --color-ink-body: #3f3830; /* ~10.5 — gövde metni */
+  --color-ink-muted: #574f44; /*  ~7.6 — ikincil metin */
+  --color-ink-faint: #6b6252; /*  ~5.6 — en silik metin (shade üstünde ~5.2) */
 
   /* ── Altın aksan ────────────────────────────────────────────────────────── */
-  --color-gold: #9c7a3c; /*  3.39 — ÇİZGİ / ODAK / İŞARET. Metin değil. */
-  --color-gold-deep: #7a5f2f; /*  5.09 — altın metin gerektiğinde */
+  --color-gold: #9c7a3c; /*  ~3.7 — ÇİZGİ / ODAK / İŞARET. Metin değil. */
+  --color-gold-deep: #7a5f2f; /*  ~5.6 — altın metin gerektiğinde */
 
   /* ── Pipeline durum çiftleri (bg + ink) ─────────────────────────────────────
      Her çiftin metin kontrastı kendi zemininde ölçüldü; hepsi AA üstü.
@@ -64,16 +70,39 @@
   --color-state-error-ink: #8a3428; /* 6.08 — hata */
 
   /* ── Tipografi ──────────────────────────────────────────────────────────────
-     Mono etiket ölçüsü — marka sitesinin eyebrow'u ile aynı (11px / 0.16em). */
+     Mono etiket ölçüsü (rozet, sayaç, küçük üst başlık). Panelde `.panel-scale`
+     bunu büyütür; buradaki değer panel dışı (giriş sayfası) içindir. */
   --text-label: 0.6875rem;
   --text-label--line-height: 1rem;
   --tracking-label: 0.16em;
 
   /* ── Gölge ──────────────────────────────────────────────────────────────────
-     TEK gölge, yalnızca çerçeveli eserde (ui.tsx → Framed). Kartlarda gölge YOK;
-     marka dili mat/baskı, yüzey ayrımı 1px `border-sand` ile yapılır. */
+     `card`: kartlara çok hafif bir kalkma — beyaz kart kırık beyaz zeminde yalnızca
+     1px kenarla "düz" kalıyordu. `frame`: çerçeveli eser (ui.tsx → Framed). */
+  --shadow-card: 0 1px 2px rgb(36 31 28 / 0.05), 0 1px 1px rgb(36 31 28 / 0.03);
   --shadow-frame:
     0 1px 0 rgb(36 31 28 / 0.05), 0 10px 26px -14px rgb(36 31 28 / 0.22);
+}
+
+/*
+  PANEL YAZI ÖLÇEĞİ — yalnızca admin layout'unun sarmalayıcısında (`.panel-scale`).
+  Tailwind v4'te `text-sm` vb. `font-size: var(--text-sm)` üretir; değişkeni bir alt
+  ağaçta yeniden tanımlamak o ağaçtaki TÜM kullanımları büyütür, marka sitesi ve giriş
+  sayfası etkilenmez. Tek tek dosyalarda `text-xs → text-sm` değiştirmek yerine tek yer.
+  Varsayılanlar: xs 12 · sm 14 · base 16 · label 11px → burada 13 · 15 · 17 · 12.5px.
+  Mono etiketin harf aralığı da daraltıldı: 0.16em geniş aralık küçük puntoda okumayı
+  zorlaştırıyordu.
+*/
+.panel-scale {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.75rem;
+  --text-label: 0.78125rem;
+  --text-label--line-height: 1.125rem;
+  --tracking-label: 0.07em;
 }
 
 @layer base {

@@ -19,14 +19,14 @@ export function Stepper({ status }: { status: PipelineStatus | 'idle' }) {
   const errored = status === 'error';
 
   return (
-    <div className="border-y border-sand bg-shade">
+    <div className="rounded-lg border border-sand bg-sheet shadow-card">
       {/* Dar ekranda tüm ray sığmaz: yalnızca bulunulan adım + sayaç gösterilir. */}
-      <p className="px-1 py-3 font-mono text-label uppercase tracking-label text-ink-muted md:hidden">
+      <p className="px-4 py-3 text-sm font-medium text-ink-body md:hidden">
         {errored
           ? 'Durdu'
           : current >= STAGES.length
             ? 'Tamamlandı'
-            : `No. 0${current + 1} — ${STAGES[current]?.label} · ${current + 1}/${STAGES.length}`}
+            : `Adım ${current + 1}/${STAGES.length} — ${STAGES[current]?.label}`}
       </p>
 
       <ol className="hidden items-stretch md:flex">
@@ -36,37 +36,35 @@ export function Stepper({ status }: { status: PipelineStatus | 'idle' }) {
           return (
             <li
               key={stage.key}
-              className={`flex flex-1 items-center gap-2.5 border-b-2 px-4 py-3 ${
+              aria-current={active ? 'step' : undefined}
+              className={`flex flex-1 items-center gap-3 border-b-[3px] px-4 py-3.5 ${
                 active ? 'border-gold' : 'border-transparent'
               }`}
             >
-              {/* Tamamlanan adım altın dolu kare, bulunulan adım mürekkep dolu kare,
-                  gelecek adım boş kare — şekil de renk kadar bilgi taşır. */}
+              {/* Tamamlanan adım ✓ (altın dolu), bulunulan adım numara (mürekkep dolu),
+                  gelecek adım numara (boş halka) — şekil de renk kadar bilgi taşır. */}
               <span
                 aria-hidden
-                className={`size-2 shrink-0 ${
+                className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-semibold tabular-nums ${
                   done
-                    ? 'bg-gold'
+                    ? 'bg-gold text-sheet'
                     : active
-                      ? 'bg-ink'
-                      : 'border border-sand bg-transparent'
+                      ? 'bg-ink text-sheet'
+                      : 'border border-field text-ink-faint'
                 }`}
-              />
-              <span className="min-w-0">
-                <span
-                  className={`block font-mono text-label uppercase tracking-label ${
-                    done || active ? 'text-gold-deep' : 'text-ink-faint'
-                  }`}
-                >
-                  No. 0{i + 1}
-                </span>
-                <span
-                  className={`block truncate font-display text-sm tracking-tight ${
-                    active ? 'text-ink' : done ? 'text-ink-body' : 'text-ink-faint'
-                  }`}
-                >
-                  {stage.label}
-                </span>
+              >
+                {done ? '✓' : i + 1}
+              </span>
+              <span className="sr-only">
+                Adım {i + 1}
+                {done ? ' (tamamlandı)' : ''}:
+              </span>
+              <span
+                className={`min-w-0 truncate text-sm ${
+                  active ? 'font-semibold text-ink' : done ? 'font-medium text-ink-body' : 'text-ink-faint'
+                }`}
+              >
+                {stage.label}
               </span>
             </li>
           );

@@ -45,7 +45,7 @@ export function PublishReview({
         KARAR BANDI — en kritik karar (fiyat + yayınla) eskiden sayfanın EN ALTINDA,
         w-28'lik küçük bir input olarak duruyordu. Artık üstte ve ekranda kalıyor.
       */}
-      <div className="sticky top-4 z-10 -mx-5 mb-5 border-y border-sand bg-shade px-5 py-4">
+      <div className="sticky top-4 z-10 -mx-5 mb-5 border-y border-sand bg-shade/95 px-5 py-4 backdrop-blur-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <Field label="Fiyat (USD)" htmlFor="publish-price">
             <div className="relative w-32">
@@ -81,7 +81,7 @@ export function PublishReview({
           </div>
         </div>
 
-        <p className="mt-3 font-mono text-label uppercase tracking-label tabular-nums text-ink-muted">
+        <p className="mt-3 text-sm tabular-nums text-ink-muted">
           {imageCount} görsel{run.mediaUrls?.video ? ' · 1 video' : ''} · {files.length} JPG · kapak #
           {thumbnailIndex + 1}
         </p>
@@ -98,8 +98,11 @@ export function PublishReview({
 
       {/* Mockup'lar */}
       <div className="mt-5">
-        <p className="font-mono text-label uppercase tracking-label text-ink-muted">
-          Mockuplar {filledMockups}/8 — kapak olacak kareye tıkla, beğenmediğini yeniden üret
+        <p className="text-base font-semibold text-ink">
+          Mockuplar <span className="font-normal tabular-nums text-ink-muted">{filledMockups}/8</span>
+        </p>
+        <p className="mt-0.5 text-sm text-ink-muted">
+          Kapak olacak kareye tıkla; beğenmediğini “Yeniden üret” ile değiştir.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-5 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => {
@@ -126,7 +129,7 @@ export function PublishReview({
                         className={FRAMED_IMG}
                       />
                     ) : (
-                      <div className="grid h-full w-full place-items-center font-mono text-label uppercase tracking-label text-ink-faint">
+                      <div className="grid h-full w-full place-items-center text-sm text-ink-faint">
                         boş
                       </div>
                     )}
@@ -140,13 +143,13 @@ export function PublishReview({
                 {/* Kapak işareti ve "yeniden üret" mat'ın DIŞINDA — eserin üstünü
                     kapatmıyor ve "yeniden üret" artık hover'da belirmiyor, hep görünür. */}
                 <div className="mt-1.5 flex items-center justify-between gap-2">
-                  <span className="font-mono text-label uppercase tracking-label text-gold-deep">
-                    {isThumb ? 'Kapak' : ''}
+                  <span className="text-sm font-semibold text-gold-deep">
+                    {isThumb ? '★ Kapak' : ''}
                   </span>
                   <button
                     onClick={() => onRegenerate(i)}
                     disabled={busy || isRegen || regenIndex !== null}
-                    className="font-mono text-label uppercase tracking-label text-ink-faint transition-colors hover:text-ink disabled:opacity-50"
+                    className="cursor-pointer rounded-full px-2 py-1 text-sm font-medium text-ink-muted transition-colors hover:bg-shade hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isRegen ? 'Üretiliyor…' : '↻ Yeniden üret'}
                   </button>
@@ -160,7 +163,7 @@ export function PublishReview({
       {/* Video + ölçü görseli */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Zoom video</p>
+          <p className="text-sm font-semibold text-ink">Zoom video</p>
           {run.mediaUrls?.video ? (
             <>
               <video src={run.mediaUrls.video} controls className="mt-2 w-full rounded-lg ring-1 ring-sand" />
@@ -179,7 +182,7 @@ export function PublishReview({
           )}
         </div>
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Ölçü görseli</p>
+          <p className="text-sm font-semibold text-ink">Ölçü görseli</p>
           {run.mediaUrls?.sizeGuide ? (
             <Image
               src={run.mediaUrls.sizeGuide}
@@ -203,7 +206,7 @@ export function PublishReview({
 
       {/* Dijital dosyalar */}
       <div className="mt-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+        <p className="text-sm font-semibold text-ink">
           {filesSummary(run.productType, files.length)}
         </p>
         <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">

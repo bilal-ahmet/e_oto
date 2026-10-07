@@ -29,7 +29,7 @@ export function DoneView({
         Bu uyarı olmadan kullanıcı ilanın canlı olduğunu sanıyordu; üstelik taslak bir ilana
         Pinterest pini atmak ölü link üretiyor. Sıradaki adım açıkça söylenir.
       */}
-      <div className="mt-4 rounded-xs border-l-2 border-l-gold bg-state-turn px-4 py-3">
+      <div className="mt-4 rounded-md border-l-4 border-l-gold bg-state-turn px-4 py-3">
         <p className="text-sm font-medium text-state-turn-ink">İlan taslak durumda — henüz satışta değil.</p>
         <p className="mt-1 text-sm text-state-turn-ink">
           Son kontrolü yapıp Etsy panelinden yayına alman gerekiyor. Pinterest pinini de{' '}

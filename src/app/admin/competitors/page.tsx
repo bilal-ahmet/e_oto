@@ -150,7 +150,7 @@ export default function CompetitorsPage() {
             </option>
           ))}
         </Select>
-        <span className="font-mono text-label uppercase tracking-label tabular-nums text-ink-faint">
+        <span className="text-sm tabular-nums text-ink-muted">
           {rows.length} ürün
         </span>
       </div>
@@ -158,8 +158,8 @@ export default function CompetitorsPage() {
       <Card padded={false} className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-sand bg-shade text-left font-mono text-label uppercase tracking-label text-ink-muted">
-              <th className="px-5 py-3 font-medium">Ürün</th>
+            <tr className="border-b border-sand bg-shade text-left text-sm text-ink-body">
+              <th className="px-5 py-3 font-semibold">Ürün</th>
               {COLUMNS.map((col) => (
                 <th key={col.key} className="px-4 py-3 font-medium">
                   <button
@@ -198,7 +198,7 @@ export default function CompetitorsPage() {
                 <tr key={row.listingId} className="transition-colors hover:bg-shade/60">
                   <td className="max-w-xs px-5 py-3">
                     <p className="truncate font-medium text-ink">{row.title}</p>
-                    <p className="mt-0.5 font-mono text-label uppercase tracking-label text-ink-faint">
+                    <p className="mt-0.5 text-xs text-ink-muted">
                       {shopName(row.shopId)}
                     </p>
                   </td>

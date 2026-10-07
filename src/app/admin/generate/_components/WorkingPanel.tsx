@@ -60,9 +60,7 @@ export function WorkingPanel({ status }: { status: PipelineStatus }) {
 
   return (
     <Card>
-      <p className="font-mono text-label uppercase tracking-label text-gold-deep">
-        No. 0{Math.min(gate + 1, 4)} — {meta.label}
-      </p>
+      <p className="text-sm font-semibold text-gold-deep">Adım {Math.min(gate + 1, 4)} / 4</p>
       <h2 className="mt-2 flex items-center gap-3 font-display text-2xl tracking-tight text-ink">
         <Spinner className="text-gold-deep" />
         {meta.label}
@@ -75,7 +73,7 @@ export function WorkingPanel({ status }: { status: PipelineStatus }) {
         <div className="h-full w-1/3 bg-gold motion-safe:animate-[working-sweep_2.4s_ease-in-out_infinite]" />
       </div>
 
-      <p className="mt-3 font-mono text-label uppercase tracking-label tabular-nums text-ink-faint">
+      <p className="mt-3 text-sm font-medium tabular-nums text-ink-body">
         {mmss(seconds)} geçti
         {TYPICAL[status] ? ` · ${TYPICAL[status]}` : ''}
       </p>

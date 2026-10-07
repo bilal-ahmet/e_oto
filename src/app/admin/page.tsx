@@ -119,7 +119,7 @@ export default async function DashboardPage({
               key={s.label}
               className={`px-5 py-4 ${i < 2 ? 'border-b border-sand md:border-b-0' : ''}`}
             >
-              <dt className="font-mono text-label uppercase tracking-label text-ink-faint">
+              <dt className="text-sm font-medium text-ink-muted">
                 {s.label}
               </dt>
               <dd className="mt-1 font-display text-4xl tabular-nums text-ink">{s.value}</dd>
@@ -176,7 +176,7 @@ export default async function DashboardPage({
                 </ul>
 
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-sand bg-shade px-5 py-3">
-                  <span className="font-mono text-label uppercase tracking-label tabular-nums text-ink-faint">
+                  <span className="text-sm tabular-nums text-ink-muted">
                     {offset + 1}–{offset + runs.length} / {total} kayıt
                   </span>
                   <div className="flex items-center gap-1">
@@ -214,7 +214,7 @@ export default async function DashboardPage({
             action={
               <Link
                 href="/admin/competitors"
-                className="font-mono text-label uppercase tracking-label text-ink-muted hover:text-ink"
+                className="text-sm font-semibold text-ink-muted underline decoration-sand underline-offset-4 hover:text-ink hover:decoration-ink"
               >
                 Tümü →
               </Link>
@@ -233,7 +233,7 @@ export default async function DashboardPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-ink">{c.title}</p>
-                        <p className="mt-0.5 font-mono text-label uppercase tracking-label text-ink-faint">
+                        <p className="mt-0.5 text-xs text-ink-muted">
                           {shopName(c.shopId)}
                         </p>
                       </div>
@@ -273,10 +273,10 @@ function PageLink({
   current?: boolean;
   children: React.ReactNode;
 }) {
-  const base = 'rounded-full px-2.5 py-1 font-mono text-label uppercase tracking-label tabular-nums';
+  const base = 'inline-flex min-h-8 min-w-8 items-center justify-center rounded-full px-3 text-sm font-medium tabular-nums';
   if (disabled) {
     return (
-      <span className={`${base} ${current ? 'bg-ink text-paper' : 'text-sand'}`}>
+      <span className={`${base} ${current ? 'bg-ink text-sheet' : 'text-ink-faint/50'}`}>
         {children}
       </span>
     );
@@ -285,7 +285,7 @@ function PageLink({
     <Link
       href={href}
       scroll={false}
-      className={`${base} text-ink-muted transition-colors hover:bg-sand-soft hover:text-ink`}
+      className={`${base} text-ink-muted transition-colors hover:bg-sheet hover:text-ink hover:ring-1 hover:ring-field`}
     >
       {children}
     </Link>

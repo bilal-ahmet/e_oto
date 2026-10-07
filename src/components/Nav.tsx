@@ -19,27 +19,26 @@ function isActive(pathname: string, href: string): boolean {
  * (bkz. src/app/(marketing)/layout.tsx): kâğıt zemin, kum çizgi, serif marka adı,
  * mono etiketler, sağda hap bağlantı.
  *
- * Aktif link DOLGU ile değil ALTIN ÇİZGİ ile işaretlenir — dolgu gri hap, kâğıt
- * zeminde bir "buton" gibi okunup tıklanabilir sanılıyordu.
+ * Aktif link DOLGU ile değil ALTIN ÇİZGİ + koyu metin ile işaretlenir — dolgu gri hap
+ * bir "buton" gibi okunup tıklanabilir sanılıyordu.
+ * Bağlantılar düz yazı, cümle düzeninde: büyük harf mono etiketler küçük puntoda zor okunuyordu.
  */
 export function Nav() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-sand bg-paper">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 sm:px-6 lg:px-8">
+    <header className="border-b border-sand bg-sheet">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-2 px-4 sm:px-6 lg:px-8">
         <Link
           href="/admin"
-          className="flex shrink-0 items-baseline gap-2 font-display text-lg tracking-tight text-ink"
+          className="flex shrink-0 items-baseline gap-2 py-4 font-display text-xl tracking-tight text-ink"
         >
           Velora
-          <span className="font-mono text-label uppercase tracking-label text-ink-faint">
-            Panel
-          </span>
+          <span className="text-sm font-normal text-ink-faint">Panel</span>
         </Link>
 
         {/* Dar ekranda linkler yatay şeride döner — 4 link 375px'te sıkışıyordu. */}
-        <nav className="-mb-4 flex min-w-0 flex-1 items-center gap-5 overflow-x-auto pb-4">
+        <nav className="flex min-w-0 flex-1 items-stretch gap-1 self-stretch overflow-x-auto">
           {LINKS.map((link) => {
             const active = isActive(pathname, link.href);
             return (
@@ -47,10 +46,10 @@ export function Nav() {
                 key={link.href}
                 href={link.href}
                 aria-current={active ? 'page' : undefined}
-                className={`shrink-0 border-b-2 pb-1 font-mono text-label uppercase tracking-label transition-colors ${
+                className={`flex shrink-0 items-center border-b-[3px] px-3 py-3 text-sm transition-colors ${
                   active
-                    ? 'border-gold text-ink'
-                    : 'border-transparent text-ink-muted hover:text-ink'
+                    ? 'border-gold font-semibold text-ink'
+                    : 'border-transparent font-medium text-ink-muted hover:border-sand hover:text-ink'
                 }`}
               >
                 {link.label}
@@ -59,10 +58,10 @@ export function Nav() {
           })}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 py-3">
           <Link
             href="/"
-            className="rounded-full border border-ink px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink transition-colors hover:bg-ink hover:text-paper"
+            className="rounded-full border border-field px-4 py-1.5 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-shade"
           >
             Mağaza sitesi
           </Link>
@@ -75,7 +74,7 @@ export function Nav() {
           <form action="/api/auth/logout" method="post">
             <button
               type="submit"
-              className="rounded-full border border-sand bg-sheet px-4 py-1.5 font-mono text-label uppercase tracking-label text-ink-muted transition-colors hover:border-ink hover:text-ink"
+              className="cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-shade hover:text-ink"
             >
               Çıkış
             </button>

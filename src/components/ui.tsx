@@ -10,14 +10,17 @@
  * ║ server-safe ve klavye/ekran okuyucu desteği bedava gelir.                 ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * Görsel dil: marka sitesinin (src/app/(marketing)/) kâğıt paleti. Renk token'ları
- * ve kontrast kuralları `src/app/globals.css` içindedir. Kısaca:
- *   · yüzey  = paper (sayfa) / sheet (kart) / shade (girinti, ikincil bant)
- *   · çizgi  = sand
+ * Görsel dil: açık, beyaza yakın zemin + beyaz kartlar. Renk token'ları ve kontrast
+ * kuralları `src/app/globals.css` içindedir. Kısaca:
+ *   · yüzey  = paper (sayfa) / sheet (kart, form alanı) / shade (girinti, ikincil bant)
+ *   · çizgi  = sand (kart/bölüm) · field (form alanı kenarı — görünür olmak ZORUNDA)
  *   · metin  = ink > ink-body > ink-muted > ink-faint
  *   · altın  = gold yalnızca ÇİZGİ/ODAK/İŞARET; metin gerekiyorsa gold-deep
- *   · şekil  = hap (rounded-full) veya düz kâğıt kenarı (rounded-xs). Ara form yok.
- *   · gölge  = yalnızca `Framed`. Kartlarda gölge yok, yüzey ayrımı 1px kenarlıkla.
+ *   · şekil  = buton/rozet hap (rounded-full); kart rounded-lg; form alanı rounded-md
+ *   · gölge  = kart `shadow-card` (çok hafif), çerçeveli eser `shadow-frame`
+ *   · etiket = kullanıcının OKUMASI gereken her şey (alan adı, menü, bölüm başlığı,
+ *              hata) düz yazı, cümle düzeninde. Büyük harf mono yalnızca rozet/sayaç gibi
+ *              göz ucuyla taranan kısa işaretler için.
  */
 
 import Link from 'next/link';
@@ -45,7 +48,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xs border border-sand bg-sheet ${padded ? 'p-5' : ''} ${className}`}
+      className={`rounded-lg border border-sand bg-sheet shadow-card ${padded ? 'p-5' : ''} ${className}`}
     >
       {children}
     </div>
@@ -74,7 +77,7 @@ export function PageHeader({
           </div>
         ) : null}
         <h1 className="font-display text-3xl tracking-tight text-ink">{title}</h1>
-        {description ? <p className="mt-2 max-w-2xl text-sm text-ink-muted">{description}</p> : null}
+        {description ? <p className="mt-2 max-w-2xl text-base text-ink-muted">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -100,9 +103,7 @@ export function SectionHeading({
     <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1 border-b border-sand pb-2">
       <div>
         {no ? (
-          <span className="mr-2 font-mono text-label uppercase tracking-label text-gold-deep">
-            No. {no}
-          </span>
+          <span className="mr-2 text-sm font-semibold text-gold-deep">Adım {Number(no)} ·</span>
         ) : null}
         <h2 className="inline font-display text-xl tracking-tight text-ink">{title}</h2>
         {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
@@ -122,18 +123,22 @@ export type ButtonSize = 'sm' | 'md';
  * sil, board sil). "İptal / vazgeç" gibi zararsız çıkışlar `ghost` kullanır — eskiden
  * aynı `reject()` çağrısı bir kapıda danger, diğerinde ghost görünüyordu.
  */
+// Kenarlıklı varyantların kenarı `field` (≥3:1) — eskiden `ghost` `sand` kenarlıydı ve
+// beyaz zeminde bir buton değil, düz metin gibi görünüyordu.
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-ink text-paper hover:bg-ink/85 disabled:bg-ink/30',
+  primary: 'border border-ink bg-ink text-sheet hover:bg-ink/85 disabled:border-transparent disabled:bg-ink/30',
   secondary:
-    'border border-ink text-ink hover:bg-ink hover:text-paper disabled:border-sand disabled:text-ink-faint disabled:hover:bg-transparent disabled:hover:text-ink-faint',
-  ghost: 'border border-sand bg-sheet text-ink-body hover:border-ink hover:text-ink disabled:text-ink-faint',
+    'border border-ink bg-sheet text-ink hover:bg-ink hover:text-sheet disabled:border-sand disabled:text-ink-faint disabled:hover:bg-sheet disabled:hover:text-ink-faint',
+  ghost:
+    'border border-field bg-sheet text-ink hover:border-ink hover:bg-shade disabled:border-sand disabled:text-ink-faint disabled:hover:bg-sheet',
   danger:
     'border border-state-error-ink/40 bg-state-error text-state-error-ink hover:border-state-error-ink disabled:opacity-60',
 };
 
+// min-h: dokunma hedefi — sm 36px, md 44px (eskiden md ~36px, sm ~28px idi).
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-5 py-2 text-sm',
+  sm: 'min-h-9 px-4 py-1.5 text-sm',
+  md: 'min-h-11 px-6 py-2.5 text-sm',
 };
 
 /**
@@ -150,7 +155,7 @@ export function buttonClasses({
   size = 'md',
   className = '',
 }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}): string {
-  return `inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors disabled:cursor-not-allowed ${SIZES[size]} ${VARIANTS[variant]} ${className}`;
+  return `inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-semibold transition-colors disabled:cursor-not-allowed ${SIZES[size]} ${VARIANTS[variant]} ${className}`;
 }
 
 export function Button({
@@ -191,12 +196,14 @@ export function ExternalLinkButton({
 /**
  * Tüm form girdilerinin ortak iskeleti.
  * Odak stili BİLEREK yok — `globals.css`'teki tek `:focus-visible` kuralından gelir.
- * Elle yazıldığı dönemde 18 girdinin 4'ünde unutulmuştu.
+ * Elle yazıldığı dönemde 18 girdinin 4'ünde unutulmuştu. `focus:border-ink` yalnızca
+ * kenarı koyulaştırır (fare ile tıklayınca da hangi alanda olduğun görünsün).
+ * Elle form alanı YAZMAYIN — Input/Textarea/Select kullanın (görünüm tek yerde kalsın).
  */
 const FIELD_BASE =
-  'w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint transition-colors hover:border-ink/40 disabled:bg-shade disabled:text-ink-faint';
+  'w-full rounded-md border border-field bg-sheet px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-faint transition-colors hover:border-ink/70 focus:border-ink disabled:border-sand disabled:bg-shade disabled:text-ink-faint';
 
-const INVALID = 'border-state-error-ink/50';
+const INVALID = 'border-state-error-ink';
 
 export function Input({
   className = '',
@@ -257,13 +264,9 @@ export function Field({
   return (
     <div className={className}>
       <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={htmlFor} className="text-sm font-medium text-ink">
+        <label htmlFor={htmlFor} className="text-sm font-semibold text-ink">
           {label}
-          {optional ? (
-            <span className="ml-2 font-mono text-label uppercase tracking-label text-ink-faint">
-              opsiyonel
-            </span>
-          ) : null}
+          {optional ? <span className="ml-1.5 font-normal text-ink-faint">(opsiyonel)</span> : null}
         </label>
         {counter ? (
           <span className={`font-mono text-label tabular-nums ${counterTone}`}>
@@ -272,12 +275,8 @@ export function Field({
         ) : null}
       </div>
       {hint ? <p className="mt-1 text-xs leading-relaxed text-ink-muted">{hint}</p> : null}
-      <div className="mt-1.5">{children}</div>
-      {error ? (
-        <p className="mt-1.5 font-mono text-label uppercase tracking-label text-state-error-ink">
-          {error}
-        </p>
-      ) : null}
+      <div className="mt-2">{children}</div>
+      {error ? <p className="mt-1.5 text-sm font-medium text-state-error-ink">{error}</p> : null}
     </div>
   );
 }
@@ -365,7 +364,7 @@ export function Alert({
 }) {
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xs border-l-2 ${
+      className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border-l-4 ${
         compact ? 'px-3 py-2' : 'px-4 py-3'
       } ${ALERT_TONES[tone]} ${className}`}
     >
@@ -401,8 +400,8 @@ export function EmptyState({
         aria-hidden
         className="mx-auto mb-4 h-16 w-12 border-[6px] border-paper bg-shade outline outline-1 -outline-offset-1 outline-ink/25"
       />
-      <p className="font-mono text-label uppercase tracking-label text-ink-muted">{title}</p>
-      {description ? <p className="mx-auto mt-2 max-w-sm text-sm text-ink-faint">{description}</p> : null}
+      <p className="text-base font-semibold text-ink-body">{title}</p>
+      {description ? <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-muted">{description}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );
@@ -455,11 +454,29 @@ export function Framed({
         {children}
       </div>
       {caption ? (
-        <figcaption className="mt-2 font-mono text-label uppercase tracking-label text-ink-muted">
+        <figcaption className="mt-2 text-sm text-ink-muted">
           {caption}
         </figcaption>
       ) : null}
     </figure>
+  );
+}
+
+// ── Açılır bölüm oku ────────────────────────────────────────────────────────
+
+/**
+ * `<summary>` sağındaki ok — bölümün açılıp kapandığını yazısız anlatır. Kapsayan
+ * `<details>` `group` sınıfını taşımalı: dönüş `group-open:` ile yapılır (state yok).
+ */
+export function Chevron({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 20 20"
+      className={`size-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180 ${className}`}
+    >
+      <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

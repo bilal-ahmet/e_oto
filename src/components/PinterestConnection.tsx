@@ -123,7 +123,7 @@ export async function PinterestConnection({
       action={connectButton}
       className="mb-6"
     >
-      <p className="font-mono text-label uppercase tracking-label">
+      <p className="text-sm">
         <span className="mr-2 inline-block size-1.5 rounded-full bg-state-done-ink align-middle" aria-hidden />
         {apiEnv()} · Son yetkilendirme: {fmt(meta.updatedAt)} · Geçerlilik: {fmt(meta.expiresAt)}
         {callbackResult?.status === 'connected' ? ' · yetkilendirme tamamlandı' : ''}

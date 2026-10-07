@@ -25,10 +25,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const store = await cookies();
   if (!verifySession(store.get(SESSION_COOKIE)?.value).valid) redirect('/login?next=%2Fadmin');
 
+  // `panel-scale`: panelin büyütülmüş yazı ölçeği (bkz. globals.css) — yalnızca bu ağaçta geçerli.
   return (
-    <>
+    <div className="panel-scale">
       <Nav />
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">{children}</main>
-    </>
+    </div>
   );
 }

@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import type { PinCopy } from '@/types';
-import { Button, Spinner } from '@/components/ui';
+import { Button, Field, Input, Spinner, Textarea } from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
 import { readJson } from './shared';
-import { LabeledField } from './LabeledField';
 
 /**
  * Pinterest pin onay kapısı: metni Claude üretir, kullanıcı DÜZENLEYİP onaylar, sonra pinlenir.
@@ -55,7 +54,10 @@ export function PinterestPanel({
             {loading ? <Spinner /> : null}
             {loading ? 'Metin hazırlanıyor…' : "Pinterest'te pinle"}
           </Button>
-          <a href="/api/auth/pinterest/start" className="text-xs text-ink-faint hover:text-ink-body">
+          <a
+            href="/api/auth/pinterest/start"
+            className="text-sm font-medium text-ink-muted underline decoration-sand underline-offset-4 hover:text-ink hover:decoration-ink"
+          >
             Pinterest hesabını bağla
           </a>
         </div>
@@ -75,33 +77,38 @@ export function PinterestPanel({
       </p>
       {warning ? <p className="mt-2 text-sm text-state-turn-ink">{warning}</p> : null}
 
-      <div className="mt-3 space-y-3">
-        <LabeledField label="Başlık" hint={`${copy.title.length}/100`}>
-          <input
+      <div className="mt-4 space-y-4">
+        <Field label="Başlık" htmlFor="pin-title" counter={{ value: copy.title.length, max: 100 }}>
+          <Input
+            id="pin-title"
             value={copy.title}
             maxLength={100}
             onChange={(e) => update({ title: e.target.value })}
-            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
-        </LabeledField>
-        <LabeledField label="Açıklama" hint={`${copy.description.length}/500`}>
-          <textarea
+        </Field>
+        <Field label="Açıklama" htmlFor="pin-desc" counter={{ value: copy.description.length, max: 500 }}>
+          <Textarea
+            id="pin-desc"
             value={copy.description}
             maxLength={500}
             rows={4}
             onChange={(e) => update({ description: e.target.value })}
-            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
-        </LabeledField>
-        <LabeledField label="Alternatif metin (erişilebilirlik)" hint={`${copy.altText.length}/500`}>
-          <textarea
+        </Field>
+        <Field
+          label="Alternatif metin"
+          htmlFor="pin-alt"
+          hint="Görme engelli kullanıcılar için görselin kısa tarifi."
+          counter={{ value: copy.altText.length, max: 500 }}
+        >
+          <Textarea
+            id="pin-alt"
             value={copy.altText}
             maxLength={500}
             rows={2}
             onChange={(e) => update({ altText: e.target.value })}
-            className="w-full rounded-lg border border-sand px-3 py-2 text-sm"
           />
-        </LabeledField>
+        </Field>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

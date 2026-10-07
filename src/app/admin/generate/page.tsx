@@ -10,7 +10,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import type { ImageDraft, ImageModel, PinCopy, PipelineRun, ProductType, SeoData } from '@/types';
-import { Alert, Button, Card, EmptyState, FRAMED_IMG, Framed, LinkButton, PageHeader, Spinner } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  FRAMED_IMG,
+  Field,
+  Framed,
+  LinkButton,
+  PageHeader,
+  SectionHeading,
+  Select,
+  Spinner,
+  Textarea,
+  buttonClasses,
+} from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
 import {
   PRODUCT_OPTIONS,
@@ -466,7 +481,7 @@ export default function GeneratePage() {
 
       {/* Ray artık HER ZAMAN görünür (üretim başlamadan da) — kullanıcı kaç adım
           olduğunu ve nerede durduğunu ilk ekranda görüyor. */}
-      <div className="-mx-4 mb-8 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="mb-8">
         <Stepper status={status ?? 'idle'} />
       </div>
 
@@ -509,80 +524,89 @@ export default function GeneratePage() {
 
       {/* Başlangıç formu */}
       {!run ? (
-        <Card>
-          <label className="block text-sm font-medium text-ink-body">Prompt</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={4}
-            placeholder="Örn. Abstract boho wall art, neutral earthy tones, minimalist composition"
-            className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
-          />
+        <Card className="space-y-6">
+          <Field
+            label="Prompt"
+            htmlFor="gen-prompt"
+            hint="Ne tür bir görsel istediğini anlat. Referans görsel eklersen aşağıdaki “Talimat üret” bu kutuyu senin için doldurabilir."
+          >
+            <Textarea
+              id="gen-prompt"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={4}
+              placeholder="Örn. Abstract boho wall art, neutral earthy tones, minimalist composition"
+            />
+          </Field>
 
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-ink-body">Ürün tipi</label>
-            <select
-              value={productType}
-              onChange={(e) => setProductType(e.target.value as ProductType)}
-              className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field
+              label="Ürün tipi"
+              htmlFor="gen-product"
+              hint={
+                productType === 'tv' ? (
+                  <>
+                    Görsel <strong>16:9 yatay</strong> üretilir; 2 JPG (4K + Full HD), 4 TV + 4 çerçeve
+                    mockup, 16:9 video. Ölçü görseli eklenmez.
+                  </>
+                ) : undefined
+              }
             >
-              {PRODUCT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            {productType === 'tv' ? (
-              <p className="mt-1.5 text-xs text-ink-muted">
-                Frame TV: görsel <strong>16:9 yatay</strong> üretilir; 2 JPG (4K 3840×2160 + Full HD 1920×1080),
-                ekran açıklaması, 4 TV + 4 çerçeve mockup, 16:9 video. Ölçü görseli eklenmez.
-              </p>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-ink-body">Model</label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value as ImageModel)}
-                className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
+              <Select
+                id="gen-product"
+                value={productType}
+                onChange={(e) => setProductType(e.target.value as ProductType)}
               >
+                {PRODUCT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Model"
+              htmlFor="gen-model"
+              hint={
+                model === 'imagen' && referenceFile ? (
+                  <span className="text-gold-deep">
+                    Imagen 4 görsel girdisi kabul etmiyor — referanslı üretim FLUX.1 Kontext ile yapılacak.
+                  </span>
+                ) : undefined
+              }
+            >
+              <Select id="gen-model" value={model} onChange={(e) => setModel(e.target.value as ImageModel)}>
                 <option value="flux">FLUX.1 Kontext [pro] (fal.ai)</option>
                 <option value="imagen">Imagen 4 (Google)</option>
-              </select>
-              {model === 'imagen' && referenceFile ? (
-                <p className="mt-1.5 text-xs text-gold-deep">
-                  Imagen 4 görsel girdisi kabul etmiyor — referans görselli üretim FLUX.1 Kontext ile
-                  yapılacak.
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink-body">Varyasyon sayısı</label>
-              <select
+              </Select>
+            </Field>
+            <Field label="Varyasyon sayısı" htmlFor="gen-variations">
+              <Select
+                id="gen-variations"
                 value={variations}
                 onChange={(e) => setVariations(Number(e.target.value))}
-                className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
               >
                 {[1, 2, 3, 4].map((n) => (
                   <option key={n} value={n}>
                     {n} görsel
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-ink-body">
-              Referans görsel <span className="text-ink-faint">(opsiyonel)</span>
-            </label>
+          <Field
+            label="Referans görsel"
+            htmlFor="gen-reference"
+            optional
+            hint="Model görseli gerçekten görür (image-to-image). Birebir kopya çıkmaması için Prompt bir değişim talimatı olmalı."
+          >
             <input
+              id="gen-reference"
               type="file"
               accept="image/*"
               onChange={onReferenceChange}
-              className="mt-1.5 block w-full text-sm text-ink-muted file:mr-4 file:rounded-lg file:border-0 file:bg-shade file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink-body hover:file:bg-sand"
+              className="block w-full cursor-pointer text-sm text-ink-muted file:mr-4 file:cursor-pointer file:rounded-full file:border file:border-solid file:border-field file:bg-sheet file:px-4 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:border-ink hover:file:bg-shade"
             />
             {referencePreview ? (
               <Framed mat="sm" ratio="aspect-square" className="mt-3 w-24">
@@ -596,25 +620,19 @@ export default function GeneratePage() {
                 />
               </Framed>
             ) : null}
-            <p className="mt-2 text-xs text-ink-faint">
-              Referans görsel modele doğrudan girdi olarak verilir (FLUX.1 Kontext image-to-image), yani
-              model görseli gerçekten görür. Birebir kopya çıkmaması için Prompt&apos;un bir değişim
-              talimatı olması gerekir — aşağıdaki &quot;Talimat üret&quot; bunu Claude Vision ile hazırlar.
-            </p>
 
             {referenceFile ? (
-              <div className="mt-4 rounded-lg border border-sand bg-shade p-3">
-                <label className="block text-sm font-medium text-ink-body">
-                  Ek not <span className="text-ink-faint">(opsiyonel — TR veya EN)</span>
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={2}
-                  placeholder="Örn. evi farklı bir ev gibi tasarla, kahverengi arabayı lacivert yap"
-                  className="mt-1.5 w-full rounded-xs border border-sand bg-sheet px-3 py-2 text-sm text-ink transition-colors hover:border-ink/40"
-                />
-                <div className="mt-2">
+              <div className="mt-4 space-y-3 rounded-lg border border-sand bg-shade p-4">
+                <Field label="Ek not" htmlFor="gen-note" optional hint="Türkçe veya İngilizce yazabilirsin.">
+                  <Textarea
+                    id="gen-note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    rows={2}
+                    placeholder="Örn. evi farklı bir ev gibi tasarla, kahverengi arabayı lacivert yap"
+                  />
+                </Field>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <Button
                     variant="secondary"
                     onClick={generateInstruction}
@@ -623,19 +641,22 @@ export default function GeneratePage() {
                     {instructing ? <Spinner /> : null}
                     {instructing ? 'Talimat üretiliyor…' : 'Talimat üret'}
                   </Button>
+                  <p className="text-xs text-ink-muted">
+                    Talimat yukarıdaki Prompt kutusuna yazılır; düzenleyip üretebilirsin.
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-ink-faint">
-                  Üretilen talimat üstteki Prompt kutusuna yazılır; düzenleyip onaylayabilirsiniz.
-                </p>
               </div>
             ) : null}
-          </div>
+          </Field>
 
-          <div className="mt-5">
+          <div className="border-t border-sand pt-5">
             <Button onClick={generate} disabled={busy || !prompt.trim()}>
               {busy ? <Spinner /> : null}
               {busy ? 'Başlatılıyor…' : `${variations} varyasyon üret`}
             </Button>
+            {!prompt.trim() ? (
+              <p className="mt-2 text-xs text-ink-muted">Başlamak için önce bir prompt yaz.</p>
+            ) : null}
           </div>
         </Card>
       ) : null}
@@ -643,30 +664,34 @@ export default function GeneratePage() {
       {/* Taslaklar — kaydedilmiş görseller; birinden devam edip yayına gidilebilir */}
       {!run ? (
         <Card className="mt-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-ink">Taslaklar</h2>
-              <p className="text-sm text-ink-muted">
-                Kaydedilen görseller. Birinden devam edip (SEO → yayın) doğrudan listeleyebilir veya
-                dışarıdan kendi görselini yükleyebilirsin.
-              </p>
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-sheet px-4 py-2 text-sm font-medium text-ink-body ring-1 ring-inset ring-sand transition-colors hover:bg-shade">
-              {draftBusy ? <Spinner /> : null}
-              Görsel yükle
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                disabled={draftBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) uploadDraft(f);
-                }}
-              />
-            </label>
-          </div>
+          <SectionHeading
+            title="Taslaklar"
+            description="Kaydedilen görseller. Birinden devam edip (SEO → yayın) doğrudan listeleyebilir veya dışarıdan kendi görselini yükleyebilirsin."
+            action={
+              // `has-focus-visible`: gizli input odaklandığında halka görünür buton üstünde çıksın.
+              <label
+                className={buttonClasses({
+                  variant: 'ghost',
+                  size: 'sm',
+                  className: 'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-gold',
+                })}
+              >
+                {draftBusy ? <Spinner /> : null}
+                Görsel yükle
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={draftBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) uploadDraft(f);
+                  }}
+                />
+              </label>
+            }
+          />
 
           {drafts.length === 0 ? (
             <EmptyState
@@ -693,7 +718,7 @@ export default function GeneratePage() {
                       disabled={draftBusy}
                       title="Taslağı sil"
                       aria-label="Taslağı sil"
-                      className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-paper text-sm font-semibold text-ink-muted transition-colors hover:text-state-error-ink disabled:opacity-60"
+                      className="absolute right-1.5 top-1.5 grid size-8 cursor-pointer place-items-center rounded-full border border-sand bg-sheet text-lg leading-none text-ink-muted shadow-card transition-colors hover:border-state-error-ink hover:text-state-error-ink disabled:opacity-60"
                     >
                       ×
                     </button>
@@ -722,11 +747,12 @@ export default function GeneratePage() {
       {/* Kapı 1 — varyasyon seçimi */}
       {status === 'awaiting_approval' && run?.variationUrls?.length ? (
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-ink">Görsel seç</h2>
-          <p className="mb-4 text-sm text-ink-muted">
-            En beğendiğin varyasyona tıkla; SEO o görsele göre üretilecek.
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <SectionHeading
+            no="01"
+            title="Görsel seç"
+            description="En beğendiğin varyasyona tıkla; SEO o görsele göre üretilecek. Beğendiklerini “Kaydet” ile taslaklara ekleyebilirsin."
+          />
+          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {run.variationUrls.map((url, i) => (
               <div key={i} className="group">
                 <div className="relative">
@@ -747,7 +773,7 @@ export default function GeneratePage() {
                       />
                       {/* group-focus-within: klavye kullanicisi bu ipucunu eskiden HIC
                           goremiyordu — yalnizca hover'da beliriyordu. */}
-                      <span className="absolute inset-x-0 bottom-0 bg-paper/90 py-1 text-center font-mono text-label uppercase tracking-label text-ink opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      <span className="absolute inset-x-0 bottom-0 bg-ink/85 py-2 text-center text-sm font-semibold text-sheet opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                         Bu görseli seç
                       </span>
                     </Framed>
@@ -755,7 +781,7 @@ export default function GeneratePage() {
                   <button
                     onClick={() => saveVariation(i, url)}
                     disabled={savedVariations.has(i)}
-                    className="absolute right-1 top-1 rounded-full bg-paper px-2 py-0.5 font-mono text-label uppercase tracking-label text-ink-muted transition-colors hover:text-ink disabled:opacity-80"
+                    className="absolute right-1.5 top-1.5 cursor-pointer rounded-full border border-sand bg-sheet px-3 py-1 text-xs font-semibold text-ink shadow-card transition-colors hover:border-ink disabled:cursor-default disabled:text-state-done-ink"
                   >
                     {savedVariations.has(i) ? '✓ Kaydedildi' : 'Kaydet'}
                   </button>

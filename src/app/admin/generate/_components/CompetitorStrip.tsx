@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Alert, Button, Input, Spinner } from '@/components/ui';
+import { Alert, Button, Chevron, Input, Spinner } from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
 import { type CompetitorAnalysis } from './shared';
 
@@ -39,7 +39,7 @@ export function CompetitorResearchPanel({
   }
 
   return (
-    <div className="mb-6 rounded-xs border border-sand bg-shade">
+    <div className="mb-6 rounded-lg border border-sand bg-sheet shadow-card">
       {/*
         Bu panel OPSIYONEL bir on-adim ama eskiden asil formun ustunde tam genislikte
         bir karttı ve baslangic ekranini dagitiyordu. Artik tek satirlik bir serit;
@@ -47,13 +47,11 @@ export function CompetitorResearchPanel({
       */}
       {!research ? (
         <details className="group">
-          <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <span className="font-mono text-label uppercase tracking-label text-ink-muted">
-              Rakip SEO analizi · opsiyonel
+          <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3.5 hover:bg-shade">
+            <span className="text-base font-semibold text-ink">
+              Rakip SEO analizi <span className="text-sm font-normal text-ink-faint">(opsiyonel)</span>
             </span>
-            <span className="font-mono text-label uppercase tracking-label text-gold-deep">
-              Aç / kapat
-            </span>
+            <Chevron />
           </summary>
           <div className="border-t border-sand px-4 py-4">
             <p className="max-w-2xl text-sm leading-relaxed text-ink-body">
@@ -84,18 +82,16 @@ export function CompetitorResearchPanel({
 
       {research ? (
         <details className="group">
-          <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 border-l-2 border-l-gold px-4 py-3">
-            <span className="min-w-0 truncate font-mono text-label uppercase tracking-label text-gold-deep">
+          <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border-l-4 border-l-gold px-4 py-3.5 hover:bg-shade">
+            <span className="min-w-0 truncate text-sm font-semibold text-gold-deep">
               ✓ Rakip analizi bağlı · #{research.id} · {research.source.title}
             </span>
-            <span className="font-mono text-label uppercase tracking-label text-ink-muted">
-              Detaylar
-            </span>
+            <Chevron />
           </summary>
           <div className="space-y-4 border-t border-sand px-4 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Kaynak (rakip)</p>
+              <p className="text-sm font-semibold text-ink-muted">Kaynak (rakip)</p>
               <p className="mt-1 text-sm text-ink">{research.source.title}</p>
               <p className="mt-1 text-xs text-ink-muted">
                 ❤ {research.source.numFavorers} favori · {research.source.views} görüntülenme · taxonomy{' '}
@@ -110,7 +106,7 @@ export function CompetitorResearchPanel({
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gold-deep">Üretilen (özgün)</p>
+              <p className="text-sm font-semibold text-gold-deep">Üretilen (özgün)</p>
               <p className="mt-1 text-sm font-medium text-ink">{research.generated.title}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {research.generated.tags.map((t, i) => (
@@ -122,9 +118,9 @@ export function CompetitorResearchPanel({
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+            <p className="text-sm font-semibold text-ink-muted">
               Üretilen açıklama{' '}
-              <span className="font-normal normal-case tracking-normal text-gold-deep">
+              <span className="font-normal text-gold-deep">
                 — sadece fikir amaçlı, listing&apos;e geçmez
               </span>
             </p>

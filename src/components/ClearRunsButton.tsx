@@ -40,7 +40,7 @@ export function ClearRunsButton({ total, active }: { total: number; active: numb
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="font-mono text-label uppercase tracking-label text-ink-faint transition-colors hover:text-state-error-ink"
+        className="cursor-pointer text-sm font-medium text-ink-muted underline decoration-sand underline-offset-4 transition-colors hover:text-state-error-ink hover:decoration-state-error-ink"
       >
         Geçmişi temizle
       </button>
