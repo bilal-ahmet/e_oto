@@ -36,12 +36,12 @@ CLAUDE.md'de yok; karşılıkları:
 - **Çalışıyor:** Imagen + FLUX görsel üretimi, Claude SEO, 5 JPG paketleme, Etsy OAuth + yayın.
 - **Upscale:** fal kredisi yoksa pass-through (run düşmez, master orijinal çözünürlükte kalır).
 - **Pinterest:** kod tarafı TAMAM (OAuth + board seçimi/yaratma + Claude pin metni + pin atma).
-  Uygulama **Trial access**'te olduğu için `PINTEREST_API_ENV=sandbox` ile çalışıyor ve pinler
-  yalnızca hesap sahibine görünüyor.
-- **Pinterest Standard access:** başvuru bekliyor. Şart, tek kesintisiz demo videosu (OAuth ekranı
-  → token alınması → o token'la gerçek pin oluşturma aynı kayıtta). Onaylanınca production'a
-  geçilecek ve **yeniden yetkilendirme + board yeniden seçimi** gerekecek (sandbox ve production
-  token'ları geçişsiz). Ayrıntı: `.claude/skills/pinterest-publishing/SKILL.md`.
+  Trial access'te `PINTEREST_API_ENV=sandbox` ile çalışıyordu (pinler yalnızca hesap sahibine
+  görünürdü).
+- **Pinterest Standard access:** **onaylandı** (2026-10-13). `.do/app.yaml`'da
+  `PINTEREST_API_ENV=production` yapıldı. Deploy sonrası **yeniden yetkilendirme + board yeniden
+  seçimi** gerekir (sandbox ve production token'ları geçişsiz) — canlıda yapıldı mı, bu satırı
+  güncelle. Ayrıntı: `.claude/skills/pinterest-publishing/SKILL.md`.
 
 ## 3. Sprint 0 — tamamlandı
 

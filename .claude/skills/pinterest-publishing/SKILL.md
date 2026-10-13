@@ -10,9 +10,10 @@ Kod: `src/lib/pinterest/{hosts,oauth,client,boards,pins}.ts` · Akış: `publish
 
 ## Erişim katmanı — önce bunu oku
 
-Uygulama şu an **Trial access**'te: pin **yalnızca `api-sandbox.pinterest.com`** üzerinde
-oluşturulabilir ve **yalnızca hesap sahibine görünür** (Standard'da herkese açık olur). "Pin
-atıldı ama Pinterest'te göremiyorum" şikâyetinin normal cevabı budur.
+Uygulama **Standard access** aldı (2026-10-13) → `PINTEREST_API_ENV=production`, pinler herkese
+açık. **Trial** katmanında ise pin yalnızca `api-sandbox.pinterest.com` üzerinde oluşturulabilir
+ve yalnızca hesap sahibine görünürdü; env hâlâ `sandbox` ise "pin atıldı ama göremiyorum"
+şikâyetinin normal cevabı budur.
 
 - Host tek kaynaktan: `hosts.ts` → `apiBase()`, `tokenUrl()`, `isSandbox()`; `PINTEREST_API_ENV`
   = `sandbox` | `production`. **Authorize URL iki ortamda da AYNI** (`www.pinterest.com/oauth/`).

@@ -24,4 +24,4 @@ Ayrıca herkese açık bir gizlilik politikası URL'i gerekir — `/privacy` bun
 - Pinterest'i **yeniden yetkilendir** (sandbox token'ı production'da geçersizdir),
 - board'u panelden **tekrar seç** (sandbox board id'leri production'da yok).
 
-Güncel başvuru durumu: `DOCS/mimari.md`.
+Başvuru **onaylandı** (2026-10-13); `app.yaml` production'a çevrildi. Güncel durum: `DOCS/mimari.md`.

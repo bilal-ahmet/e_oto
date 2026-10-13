@@ -74,13 +74,13 @@ envs:
   - key: PINTEREST_REDIRECT_URI
     scope: RUN_TIME
     value: "https://bbfcreative.com.tr/api/auth/pinterest/callback"
-  # sandbox | production. Uygulama Trial access'te olduğu sürece SANDBOX zorunlu: trial'da
-  # production host'unda pin oluşturulamaz ve pinler yalnızca hesap sahibine görünür.
-  # Standard access onaylandığında "production" yapıp Pinterest'i YENİDEN yetkilendirin
-  # (sandbox token'ı production'da geçersizdir) ve board'u tekrar seçin.
+  # sandbox | production. Standard access onaylandı → production. (Trial access'te SANDBOX
+  # zorunluydu: production host'unda pin oluşturulamaz, pinler yalnızca hesap sahibine görünür.)
+  # Ortam değişince Pinterest YENİDEN yetkilendirilmeli (sandbox token'ı production'da
+  # geçersizdir) ve board tekrar seçilmeli.
   - key: PINTEREST_API_ENV
     scope: RUN_TIME
-    value: "sandbox"
+    value: "production"
   # PINTEREST_BOARD_ID EKLENMEZ — board /admin'deki Pinterest kartından seçilir ve
   # app_settings tablosuna yazılır (redeploy gerektirmez).
   - key: PUBLIC_BASE_URL
