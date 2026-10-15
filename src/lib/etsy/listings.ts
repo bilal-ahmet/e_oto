@@ -5,6 +5,7 @@
  */
 
 import { etsyFetch, etsyPublicFetch } from './client';
+import { toEtsySafe } from './text-rules';
 import type { ListingAttributes, SeoData } from '@/types';
 
 // En güncel "made recently" tarih aralığı; Etsy reddederse createDraftListing fallback dener.
@@ -139,16 +140,19 @@ export async function createDraftListing(
   price: number,
 ): Promise<number> {
   const taxonomyId = Number(seo.categoryId) || (await getDigitalPrintsTaxonomyId());
+  // Güvenlik ağı: gate 2'de elle girilen ya da kural öncesi onaylanmış metin Etsy'nin 400'üne
+  // (title all_caps, materials invalid_characters) takılmasın.
+  const safe = toEtsySafe(seo);
   const base = {
     quantity: 999,
-    title: seo.title,
+    title: safe.title,
     description: seo.description,
     price,
     who_made: 'i_did',
     taxonomy_id: taxonomyId,
     type: 'download', // dijital indirme
-    tags: seo.tags.join(','),
-    materials: seo.materials.join(','),
+    tags: safe.tags.join(','),
+    materials: safe.materials.join(','),
     state: 'draft',
   };
 

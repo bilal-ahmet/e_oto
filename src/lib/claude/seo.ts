@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { anthropic, CLAUDE_MODEL } from './client';
 import { buildDescriptionFor } from '@/lib/listing/description';
+import { cleanList, fixTitleCaps, sanitizeMaterial, sanitizeTag } from '@/lib/etsy/text-rules';
 import type { ProductType, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
@@ -35,15 +36,17 @@ const SYSTEM_PRINT = `You are an Etsy SEO expert for a digital wall-art / printa
 - title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Use " | " to separate keyword phrases (e.g. "Boho Abstract Arch Print | Terracotta Wall Art | Minimalist Digital Download").
 - hook: 2-3 sentences, product-specific, START with the main keyword. Include: what it is + style + which room/wall it fits + who/what occasion it suits. End by noting it is an instant digital download you can print and hang the same day. (This becomes the opening of the description.)
 - perfectFor: 3-5 short style/room/occasion keywords (e.g. "Coastal & Nautical Decor", "Beach House Wall Art", "Housewarming Gift").
-- tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. No '#', no commas inside a tag.
-- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Printable art", "JPG file").`;
+- title capitalization: Etsy rejects titles where MORE THAN 3 words start with two capital letters (e.g. "JPG", "HD", "DIY" each count; "4K" does not). Use Title Case words otherwise.
+- tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Letters, numbers, spaces, hyphen and apostrophe only. No '#', no commas inside a tag.
+- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Printable art", "JPG file"). Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.`;
 
 const SYSTEM_TV = `You are an Etsy SEO expert for a digital Frame TV / TV screen art shop (instant-download art for Samsung Frame TV and smart displays). The artwork is 16:9 landscape and is displayed ON a screen, NOT printed. Generate listing content in ENGLISH (Etsy's primary market). Rules:
-- title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Lead with Frame TV / TV art intent. Use " | " to separate keyword phrases (e.g. "Halloween Frame TV Art | Spooky Samsung Frame TV Wallpaper | Digital TV Art 4K Download").
+- title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Lead with Frame TV / TV art intent. Use " | " to separate keyword phrases (e.g. "Halloween Frame TV Art | Spooky Samsung Screen Wallpaper | Digital TV Art 4K Download").
+- title capitalization: Etsy rejects titles where MORE THAN 3 words start with two capital letters ("TV", "HD", "UHD", "JPG" each count; "4K" does not). Write "TV" at most twice and do not add "HD"/"UHD" to a title that already has two "TV"s.
 - hook: 2-3 sentences, product-specific, START with the main keyword. Structure: what it is + scene description + style/colors + which decor style/season it suits + note it is an instant download. Make clear it is for SCREEN display (Samsung Frame TV / smart TVs), not a print. (This becomes the opening of the description.)
 - perfectFor: 3-5 short style/mood/occasion keywords (e.g. "Halloween Decor", "Frame TV Art Lovers", "Dark Academia Homes", "Spooky Season Ambiance").
-- tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Prefer TV/screen keywords ("frame tv art", "samsung frame", "tv wallpaper", "digital tv art"). No '#', no commas inside a tag.
-- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Frame TV art", "JPG file", "4K wallpaper").`;
+- tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Prefer TV/screen keywords ("frame tv art", "samsung frame", "tv wallpaper", "digital tv art"). Letters, numbers, spaces, hyphen and apostrophe only. No '#', no commas inside a tag.
+- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Frame TV art", "JPG file", "4K wallpaper"). Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.`;
 
 function systemFor(productType?: ProductType): string {
   return productType === 'tv' ? SYSTEM_TV : SYSTEM_PRINT;
@@ -124,13 +127,15 @@ export async function generateSeo(
   const hook = parsed.hook.trim();
   const perfectFor = exactly(parsed.perfectFor, Math.min(Math.max(parsed.perfectFor.length, 3), 5) || 3, 'Wall Art');
 
+  // Etsy metin kuralları prompt'a güvenilmeden burada da zorlanır (temizle+tekilleştir → 13'e tamamla),
+  // böylece kullanıcı gate 2'de Etsy'nin kabul edeceği metni görür.
   return {
-    title: parsed.title.slice(0, 140),
+    title: fixTitleCaps(parsed.title).slice(0, 140),
     hook,
     perfectFor,
-    tags: exactly(parsed.tags, 13, 'wall art').map((t) => t.slice(0, 20)),
+    tags: exactly(cleanList(parsed.tags, sanitizeTag), 13, 'wall art'),
     description: buildDescriptionFor(productType, hook, perfectFor),
-    materials: exactly(parsed.materials, 13, 'Digital download'),
+    materials: exactly(cleanList(parsed.materials, sanitizeMaterial), 13, 'Digital download'),
     categoryId: '', // yayında Digital Prints taksonomi id ile doldurulur
     attributes: {
       orientation: parsed.attributes.orientation.trim() || 'Vertical',

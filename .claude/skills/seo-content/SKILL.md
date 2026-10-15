@@ -19,14 +19,16 @@ Zorlama `generateSeo`'nun dönüş nesnesinde uygulanır; Claude kaçırsa da Et
 
 | Alan | Kural | Zorlama |
 |---|---|---|
-| `title` | Ana anahtar kelimeyle BAŞLAR, ~140 karaktere kadar, ` \| ` ile keyword öbekleri ayrılır | `slice(0, 140)` |
+| `title` | Ana anahtar kelimeyle BAŞLAR, ~140 karaktere kadar, ` \| ` ile keyword öbekleri ayrılır; ilk iki harfi büyük kelime (TV, HD, JPG) **≤3** (Etsy `all_caps`) | `fixTitleCaps` + `slice(0, 140)` |
 | `hook` | 2-3 cümle açılış; açıklamanın ilk paragrafı olur | — (yalnızca prompt) |
 | `perfectFor` | 3-5 stil/mekân/vesile kelimesi | `exactly()` ile 3-5 aralığına kırpılır/doldurulur |
-| `tags` | **TAM 13**, her biri **≤20 karakter**, `#` yok, tag içinde virgül yok | `exactly(..., 13)` + `slice(0, 20)` |
-| `materials` | **TAM 13** kısa terim ("Digital download", "Printable art", "JPG file") | `exactly(..., 13)` |
+| `tags` | **TAM 13**, her biri **≤20 karakter**; yalnızca harf/rakam/boşluk/`- ' ™ © ®` | `sanitizeTag` + tekilleştir → `exactly(..., 13)` |
+| `materials` | **TAM 13** kısa terim ("Digital download", "Printable art", "JPG file"); yalnızca harf/rakam/boşluk (Etsy `invalid_characters`) | `sanitizeMaterial` + tekilleştir → `exactly(..., 13)` |
 | `categoryId` | Üretimde BOŞ bırakılır | Yayında Digital Prints taksonomi id'siyle doldurulur |
 | `attributes` | Orientation/Style/Occasion/Room/Subject | Taksonomi eşlemesi Etsy tarafında |
 
+Etsy karakter/büyük harf kuralları `src/lib/etsy/text-rules.ts`'te tek yerde; `createDraftListing`
+`toEtsySafe` ile yayında tekrar uygular (gate 2 elle düzenleme için güvenlik ağı), `SeoEditor` uyarır.
 `exactly()` eksikse doldurur, fazlaysa keser. Bu sayıları değiştirirken hem prompt'u hem `exactly`
 çağrısını güncelle.
 

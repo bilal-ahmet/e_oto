@@ -51,7 +51,8 @@ Kod: `src/lib/etsy/{client,oauth,listings}.ts` · Orkestrasyon: `publishToEtsy` 
 
 ## Yayın sırası — bu sıra bozulmaz
 
-1. `createDraftListing` (`listings.ts`) → `state: 'draft'` listing
+1. `createDraftListing` (`listings.ts`) → `state: 'draft'` listing; title/tags/materials önce
+   `toEtsySafe` (`text-rules.ts`) — Etsy 400 `all_caps` / `invalid_characters` önlemi
 2. `setListingAttributes` → öznitelikler
 3. `uploadListingImage` → mockup'lar: seçilen thumbnail **rank 1'e** alınır, kalanlar sırayla
    (ham sanat görseli display olarak YÜKLENMEZ). Etsy tavanı: 10 görsel.

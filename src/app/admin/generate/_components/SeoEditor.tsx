@@ -5,6 +5,7 @@ import Image from 'next/image';
 import type { ProductType, SeoData } from '@/types';
 import { Button, Card, Chevron, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner, Textarea } from '@/components/ui';
 import { previewAspectClass } from './shared';
+import { MAX_CAPS_WORDS, countCapsWords, hasInvalidMaterialChars } from '@/lib/etsy/text-rules';
 
 export function SeoEditor({
   initial,
@@ -34,6 +35,9 @@ export function SeoEditor({
     });
   }
   const titleLen = seo.title.length;
+  // Etsy kuralları da yalnızca ISARETLENIR: yayında text-rules otomatik düzeltir.
+  const capsWords = countCapsWords(seo.title);
+  const badMaterials = seo.materials.filter(hasInvalidMaterialChars).length;
   const emptyTags = seo.tags.filter((t) => !t.trim()).length;
   // Yinelenen etiketler yalnizca ISARETLENIR, engellenmez: onay akisina yeni bir kural
   // koymak davranis degisikligi olurdu.
@@ -81,13 +85,22 @@ export function SeoEditor({
               <Chevron />
             </summary>
             <div className="space-y-5 border-t border-sand px-4 py-4">
-              <Field label="Başlık" htmlFor="seo-title" counter={{ value: titleLen, max: 140 }}>
+              <Field
+                label="Başlık"
+                htmlFor="seo-title"
+                counter={{ value: titleLen, max: 140 }}
+                error={
+                  capsWords > MAX_CAPS_WORDS
+                    ? `İki büyük harfle başlayan kelime (TV, HD, JPG…): ${capsWords}/${MAX_CAPS_WORDS} — Etsy reddeder; fazlası yayında "Tv" gibi yazılır.`
+                    : undefined
+                }
+              >
                 <Textarea
                   id="seo-title"
                   value={seo.title}
                   onChange={(e) => setField('title', e.target.value)}
                   rows={2}
-                  invalid={titleLen > 140}
+                  invalid={titleLen > 140 || capsWords > MAX_CAPS_WORDS}
                 />
               </Field>
               <Field label="Açıklama" htmlFor="seo-desc">
@@ -165,10 +178,16 @@ export function SeoEditor({
                       value={m}
                       aria-label={`Materyal ${i + 1}`}
                       onChange={(e) => setArrayItem('materials', i, e.target.value)}
-                      className="px-2.5 py-1.5"
+                      className={`px-2.5 py-1.5 ${hasInvalidMaterialChars(m) ? 'border-gold bg-state-turn' : ''}`}
                     />
                   ))}
                 </div>
+                {badMaterials > 0 ? (
+                  <p className="mt-2 text-sm font-medium text-gold-deep">
+                    Sarı zeminli materyallerde Etsy&apos;nin kabul etmediği karakter var (yalnızca harf, rakam,
+                    boşluk) — yayında boşluğa çevrilir.
+                  </p>
+                ) : null}
               </div>
 
               <div>
