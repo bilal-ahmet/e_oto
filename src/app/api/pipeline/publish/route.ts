@@ -1,7 +1,7 @@
 /**
  * POST /api/pipeline/publish
  * Body: { id: string, price?: number }
- * Kapı 3 onayı — Etsy yayınını ARKA PLANDA başlatır (taslak listing + görsel + 5 ZIP + aktive).
+ * Kapı 3 onayı — Etsy yayınını ARKA PLANDA başlatır (taslak listing + görsel + dosyalar; aktive EDİLMEZ).
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Bu adımda yayınlanamaz (durum: ${run.status}).` }, { status: 409 });
   }
 
-  const price = typeof body.price === 'number' && body.price > 0 ? body.price : 5.0;
+  // Geçersiz/eksik fiyat → undefined: publishToEtsy checkpoint'e, o da ürün tipinin varsayılanına düşer.
+  const price = typeof body.price === 'number' && body.price > 0 ? body.price : undefined;
   const thumbnailIndex = typeof body.thumbnailIndex === 'number' ? body.thumbnailIndex : 0;
   void publishToEtsy(id, price, thumbnailIndex);
   return NextResponse.json({ ok: true, status: 'publishing_etsy' }, { status: 202 });

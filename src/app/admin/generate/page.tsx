@@ -162,18 +162,25 @@ export default function GeneratePage() {
     };
   }, []);
 
-  // /admin/drafts → "Bu taslakla devam et" buraya ?draft=<id> ile yönlendirir; otomatik başlat.
+  // /admin/drafts → "Printable" / "Frame TV" buraya ?draft=<id>&type=<t> ile yönlendirir; otomatik başlat.
+  // `type` yoksa BAŞLATMAZ — sessizce print'e düşmek TV taslağını baskı ürününe çeviriyordu.
   useEffect(() => {
-    const draftId = new URLSearchParams(window.location.search).get('draft');
+    const params = new URLSearchParams(window.location.search);
+    const draftId = params.get('draft');
     if (!draftId) return;
+    const type = params.get('type');
     window.history.replaceState(null, '', '/admin/generate'); // URL'i temizle
     let active = true;
     (async () => {
+      if (type !== 'print' && type !== 'tv') {
+        setError('Taslaktan devam için ürün tipi seçilmedi — aşağıdaki taslaklardan Printable ya da Frame TV seç.');
+        return;
+      }
       try {
         const res = await apiFetch('/api/pipeline/from-draft', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draftId }),
+          body: JSON.stringify({ draftId, productType: type }),
         });
         const data = await readJson<PipelineRun & { error?: string }>(res);
         if (!active) return;
@@ -235,15 +242,16 @@ export default function GeneratePage() {
     }
   }
 
-  // Taslaktan devam et — yeni run başlatır, SEO'dan (kapı 2) itibaren akar.
-  async function continueFromDraft(draftId: string) {
+  // Taslaktan devam et — yeni run başlatır, SEO'dan (kapı 2) itibaren akar. Ürün tipi açıkça seçilir
+  // (taslakta tutulmuyor); sunucu görselin yönüyle tutarlılığını ayrıca doğrular.
+  async function continueFromDraft(draftId: string, type: ProductType) {
     setDraftBusy(true);
     setError(null);
     try {
       const res = await apiFetch('/api/pipeline/from-draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draftId, competitorResearchId: research?.id }),
+        body: JSON.stringify({ draftId, productType: type, competitorResearchId: research?.id }),
       });
       const data = await readJson<PipelineRun & { error?: string }>(res);
       if (!res.ok && res.status !== 202) throw new Error(data.error ?? 'Taslaktan başlatılamadı.');
@@ -723,14 +731,13 @@ export default function GeneratePage() {
                       ×
                     </button>
                   </div>
-                  <div>
-                    <Button
-                      onClick={() => continueFromDraft(d.id)}
-                      disabled={draftBusy}
-                      size="sm"
-                      className="mt-2 w-full"
-                    >
-                      Bu taslakla devam et
+                  <p className="mt-2 text-sm text-ink-muted">Bu taslakla devam et:</p>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    <Button onClick={() => continueFromDraft(d.id, 'print')} disabled={draftBusy} size="sm" className="whitespace-nowrap px-2">
+                      Printable
+                    </Button>
+                    <Button onClick={() => continueFromDraft(d.id, 'tv')} disabled={draftBusy} size="sm" className="whitespace-nowrap px-2">
+                      Frame TV
                     </Button>
                   </div>
                 </div>

@@ -62,7 +62,8 @@ Bu adım canlıda OOM'a ve bitmeyen run döngüsüne yol açmıştı; nedenler *
 
 `approveSeoAndProcess` (`pipeline/run.ts`): upscale (fal clarity-upscaler ×4, creativity 0.3) →
 master; sonra 8 mockup (`generateAllMockups`, flux-kontext i2i), 1 zoom video (`makeZoomVideo`,
-ffmpeg-static — sistem ffmpeg gerektirmez), 1 sabit ölçü görseli (`getSizeGuide`:
-`public/templates/size-guide.*`, 2000px JPEG'e normalize edilip süreç boyunca cache'lenir).
+ffmpeg-static — sistem ffmpeg gerektirmez), 1 ölçü görseli (`getSizeGuide`: `PRINT_RATIOS`'tan
+SVG → JPEG koddan üretilir, süreç boyunca cache'lenir; metin için konteynerde `fonts-dejavu-core`
+şart). Elle konmuş statik ölçü görseli KULLANMA — dosyalarla senkron kalmıyordu.
 **fal kredisi yoksa run DÜŞMEZ**: upscale pass-through (`upscale/client.ts`), mockup'lar boş slot
 kalır ve gate 3'te tek tek yeniden üretilir. Ham sanat görseli Etsy'ye display olarak yüklenmez.
