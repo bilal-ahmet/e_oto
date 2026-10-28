@@ -352,7 +352,7 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       }
     }
 
-    // 5) Sabit ölçü görseli — yalnızca kullanan ürün tiplerinde (print) ve yoksa ekle.
+    // 5) Ölçü görseli (PRINT_RATIOS'tan üretilir) — yalnızca kullanan ürün tiplerinde (print) ve yoksa ekle.
     if (cfg.usesSizeGuide && !media.sizeGuide) {
       const sizeGuide = await getSizeGuide();
       if (sizeGuide) {
@@ -409,7 +409,7 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
 }
 
 /**
- * Kapı 3 onayı — Etsy taslak listing + öznitelikler + medya (9 görsel + video) + 5 JPG → aktive.
+ * Kapı 3 onayı — Etsy taslak listing + öznitelikler + medya (9 görsel + video) + dijital dosyalar (taslak kalır).
  * @param thumbnailIndex Seçilen mockup index'i; ilk yüklenir (Etsy birincil/thumbnail = ilk görsel).
  */
 export async function publishToEtsy(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
@@ -426,7 +426,7 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
     // Resume: parametreler önce çağrıdan, yoksa kalıcı checkpoint'ten, yoksa default.
     // Böylece sweeper publishToEtsy(runId) ile yarım kalan yayını aynı fiyat/thumbnail ile sürdürür.
     const pp: PublishProgress = { ...(run.publishProgress ?? {}) };
-    pp.price = price ?? pp.price ?? 5.0;
+    pp.price = price ?? pp.price ?? productConfig(run.productType).defaultPrice;
     pp.thumbnailIndex = thumbnailIndex ?? pp.thumbnailIndex ?? 0;
     const effThumb = pp.thumbnailIndex;
 

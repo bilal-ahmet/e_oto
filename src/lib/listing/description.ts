@@ -12,7 +12,10 @@ const DIVIDER = '─────────────────────
 
 /** Oran → alt boyut satırı (baskı açıklamasındaki referans listesi). */
 function sizeLines(): string {
-  return PRINT_RATIOS.map((r) => `- ${r.label} → ${r.subSizes.join(', ')}`).join('\n');
+  return PRINT_RATIOS.map((r) => {
+    const iso = 'isoNote' in r ? ` (also fits ${r.isoNote})` : '';
+    return `- ${r.label} → ${r.subSizes.join(', ')}${iso}`;
+  }).join('\n');
 }
 
 /**

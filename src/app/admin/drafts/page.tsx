@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import type { ImageDraft } from '@/types';
+import type { ImageDraft, ProductType } from '@/types';
 import { Alert, Button, Card, EmptyState, FRAMED_IMG, Framed, PageHeader, Spinner, buttonClasses } from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
 
@@ -93,9 +93,11 @@ export default function DraftsPage() {
     }
   }
 
-  // Üretime taşı — /admin/generate taslağı ?draft=<id> ile alıp SEO'dan itibaren otomatik başlatır.
-  function continueWithDraft(id: string) {
-    router.push(`/admin/generate?draft=${id}`);
+  // Üretime taşı — /admin/generate taslağı ?draft=<id>&type=<t> ile alıp SEO'dan itibaren otomatik
+  // başlatır. Ürün tipi AÇIKÇA seçilir: taslak kaydında tutulmuyor, varsayılana düşmek TV eserini
+  // print'e çeviriyordu.
+  function continueWithDraft(id: string, type: ProductType) {
+    router.push(`/admin/generate?draft=${id}&type=${type}`);
   }
 
   return (
@@ -173,14 +175,15 @@ export default function DraftsPage() {
                   </button>
                 </div>
                 {/* Eylem mat'ın DIŞINDA: hover'da eserin üstünü kapatmıyor. */}
-                <Button
-                  onClick={() => continueWithDraft(d.id)}
-                  disabled={busy}
-                  size="sm"
-                  className="mt-2 w-full"
-                >
-                  Bu taslakla devam et
-                </Button>
+                <p className="mt-2 text-sm text-ink-muted">Bu taslakla devam et:</p>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <Button onClick={() => continueWithDraft(d.id, 'print')} disabled={busy} size="sm" className="whitespace-nowrap px-2">
+                    Printable
+                  </Button>
+                  <Button onClick={() => continueWithDraft(d.id, 'tv')} disabled={busy} size="sm" className="whitespace-nowrap px-2">
+                    Frame TV
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

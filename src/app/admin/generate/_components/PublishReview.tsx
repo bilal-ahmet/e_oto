@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import type { PipelineRun } from '@/types';
+import { defaultPrice } from '@/lib/product/pricing';
 import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner } from '@/components/ui';
 import { mockupAspectClass, fileLabel, filesSummary } from './shared';
 import { PipelineWarnings } from './PipelineWarnings';
@@ -23,7 +24,7 @@ export function PublishReview({
   onRegenerate: (index: number) => void;
   onReject: () => void;
 }) {
-  const [price, setPrice] = useState(5.0);
+  const [price, setPrice] = useState(() => defaultPrice(run.productType));
   const files = run.digitalFileUrls ? Object.entries(run.digitalFileUrls) : [];
   const mockups = run.mediaUrls?.mockups ?? [];
   const filledMockups = mockups.filter(Boolean).length;
@@ -198,7 +199,7 @@ export function PublishReview({
             </p>
           ) : (
             <p className="mt-2 text-sm text-ink-faint">
-              yok — <code>public/templates/size-guide.png</code> ekleyin
+              yok — ölçü görseli üretilemedi (sunucu loguna bak)
             </p>
           )}
         </div>

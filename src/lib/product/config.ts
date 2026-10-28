@@ -9,6 +9,7 @@
 import { PRINT_RATIOS, type ProductType } from '@/types';
 import { MOCKUP_SCENES, TV_MOCKUP_SCENES, type MockupScene } from '@/lib/mockup/scenes';
 import type { FluxAspectRatio } from '@/lib/flux/client';
+import { DEFAULT_PRICE } from './pricing';
 
 /** Bir dijital ürün dosyasının hedef boyutu (packaging bunu resize eder). */
 export interface DigitalFileSpec {
@@ -46,6 +47,7 @@ export interface ProductConfig {
   video: { width: number; height: number }; // zoom video çıktı boyutu
   usesSizeGuide: boolean; // sabit ölçü görseli eklenir mi
   mockupScenes: MockupScene[]; // mockup sahneleri
+  defaultPrice: number; // USD — kaynak `pricing.ts` (client da okuduğu için ayrı)
 }
 
 // Print dosya spec'i mevcut PRINT_RATIOS'tan türetilir (tek kaynak; açıklama boyut listesi de oradan).
@@ -75,6 +77,7 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     video: { width: 1080, height: 1350 }, // 4:5 dikey
     usesSizeGuide: true,
     mockupScenes: MOCKUP_SCENES,
+    defaultPrice: DEFAULT_PRICE.print,
   },
   tv: {
     type: 'tv',
@@ -88,6 +91,7 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     video: { width: 1920, height: 1080 }, // 16:9 yatay
     usesSizeGuide: false,
     mockupScenes: TV_MOCKUP_SCENES,
+    defaultPrice: DEFAULT_PRICE.tv,
   },
 };
 

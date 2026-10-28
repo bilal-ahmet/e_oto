@@ -28,6 +28,12 @@ ENV PORT=3000
 # ağ/dosya I/O'sundan ayırır. sharp eşzamanlılığı ayrıca lib/image/sharp.ts'te sınırlanır.
 ENV UV_THREADPOOL_SIZE=8
 
+# Font — ölçü görseli SVG'den (librsvg) çizilir (lib/listing/size-guide.ts). bookworm-slim'de hiç
+# font yoktur; kurulmazsa görseldeki metinler boş/kutu çıkar.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/*
+
 # Tam node_modules + build çıktısı + asset'ler (sharp/ffmpeg-static runtime'da garanti mevcut).
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next

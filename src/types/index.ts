@@ -29,7 +29,9 @@ export type ProductType = 'print' | 'tv';
  * Dijital ürün dosyaları (CLAUDE.md §1, §7, §10): oran başına TEK JPG, o oranın EN BÜYÜK boyutunda,
  * 300 DPI. Müşteri açıklamadaki alt boyutları baskıcıda küçülterek alır. 5 oran = 5 JPG (Etsy 5-dosya).
  * Boyutlar 300 DPI piksel (inç × 300). `key` aynı zamanda digitalFileUrls anahtarıdır.
- * Açıklamada listelenen alt boyutlar `subSizes` (yalnızca metin amaçlı).
+ * `subSizes` YALNIZCA o oranın tam karşılığı olan `WxH` inç boyutlarıdır — açıklama listesi ve
+ * ölçü görseli (`lib/listing/size-guide.ts`) buradan üretilir, ayrıştırılabilir kalmalı.
+ * `isoNote`: A serisi 1:1.414'tür, 5:7 (1:1.4) DEĞİL — A boyutları ayrı ve dürüst bir notla verilir.
  */
 export const PRINT_RATIOS = [
   { key: 'ratio_2x3', label: '2:3', fileName: 'ratio-2x3-24x36.jpg', width: 7200, height: 10800,
@@ -41,8 +43,12 @@ export const PRINT_RATIOS = [
   { key: 'ratio_11x14', label: '11:14', fileName: 'ratio-11x14-22x28.jpg', width: 6600, height: 8400,
     subSizes: ['11x14', '22x28'] },
   { key: 'ratio_5x7', label: '5:7', fileName: 'ratio-5x7-25x35.jpg', width: 7500, height: 10500,
-    subSizes: ['5x7', '10x14', '15x21', '20x28', '25x35', 'A1', 'A2', 'A3', 'A4', 'A5'] },
-] as const;
+    subSizes: ['5x7', '10x14', '15x21', '20x28', '25x35'],
+    isoNote: 'A1–A5 with ~1% trim' },
+] as const satisfies readonly {
+  key: string; label: string; fileName: string; width: number; height: number;
+  subSizes: readonly string[]; isoNote?: string;
+}[];
 
 export type RatioKey = (typeof PRINT_RATIOS)[number]['key'];
 
