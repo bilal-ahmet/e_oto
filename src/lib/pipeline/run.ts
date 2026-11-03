@@ -12,14 +12,15 @@
  */
 
 import { sharp } from '@/lib/image/sharp';
-import { getCompetitorResearch, getPipelineRun, updatePipelineRun } from '@/lib/db/queries';
+import { appendRunUsage, getCompetitorResearch, getPipelineRun, updatePipelineRun } from '@/lib/db/queries';
 import { keyFromUrl, putObject, readObject } from '@/lib/storage';
 import { generateImages } from '@/lib/image-gen';
 import { generateSeo } from '@/lib/claude/seo';
 import { upscale } from '@/lib/upscale/client';
 import { packageJpegs } from '@/lib/packaging/resize-and-export';
 import { assertFileKeys } from '@/lib/packaging/validate';
-import { generateAllMockups, generateMockup } from '@/lib/mockup/client';
+import { MOCKUP_MODEL, generateAllMockups, generateMockup } from '@/lib/mockup/client';
+import { FAL_PRICES } from '@/lib/cost/prices';
 import { productConfig } from '@/lib/product/config';
 import { hasFal, uploadBuffer } from '@/lib/fal';
 import { createPin, findPinForListing, getPin, resolveBoardId } from '@/lib/pinterest/pins';
@@ -148,7 +149,26 @@ export async function generateVariations(
 
       // Görsel oranı ürün tipinden gelir: print → 3:4 dikey, tv → 16:9 yatay.
       const aspect = productConfig(existing?.productType).genAspect;
-      const images = await generateImages(effectiveModel, prompt, count, aspect, referenceUrl);
+      let images: Awaited<ReturnType<typeof generateImages>> | undefined;
+      try {
+        images = await generateImages(effectiveModel, prompt, count, aspect, referenceUrl);
+      } finally {
+        // fal (FLUX) kullanım kaydı — Imagen Google faturasıdır, burada sayılmaz. Hata durumunda da
+        // yazılır: istekler fal'a ulaştıysa faturalanmış olabilir (tahmine üst sınır).
+        if (effectiveModel === 'flux') {
+          await appendRunUsage(runId, [
+            {
+              step: 'variations',
+              model: referenceUrl ? 'fal-ai/flux-pro/kontext' : 'fal-ai/flux-pro/kontext/text-to-image',
+              units: Math.max(1, Math.min(count, 4)),
+              unit: 'image',
+              unitPriceUsd: FAL_PRICES.kontextPerImage,
+              at: new Date().toISOString(),
+              note: images ? undefined : 'BAŞARISIZ (faturalanmış olabilir)',
+            },
+          ]);
+        }
+      }
       const variationUrls: string[] = [];
       for (let i = 0; i < images.length; i++) {
         variationUrls.push(
@@ -284,12 +304,17 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       master = await readObject(keyFromUrl(masterUrl));
     } else {
       const selected = await readObject(keyFromUrl(run.generatedImageUrl));
-      const up = await upscale(selected); // clarity ×4; fal yoksa pass-through
+      // Büyütme oranı hedef dosya boyutuna + MP tavanına göre (clarity MP başına ücretlendirir).
+      const up = await upscale(selected, cfg.files);
       master = up.buffer;
+      if (up.usage) await appendRunUsage(runId, [up.usage]);
       if (up.fallback) {
         await addWarning(runId, `Upscale yapılamadı, ham görsel kullanıldı (${up.fallback}) — dosyaların gerçek detayı düşük olabilir.`);
       }
       masterUrl = await putObject(`runs/${runId}/master.png`, master, 'image/png');
+      // CHECKPOINT HEMEN: eskiden master URL'i ancak 5 JPG paketlendikten SONRA yazılıyordu; paketleme
+      // (OOM'a en yatkın adım) çökünce kurtarma her denemede upscale'i YENİDEN ödüyordu.
+      await updatePipelineRun(runId, { upscaledImageUrl: masterUrl });
     }
 
     // Orientation'ı gerçek oran'dan doğrula (deterministik — resume'da da aynı sonuç).
@@ -321,35 +346,64 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       ? { ...run.mediaUrls, mockups: [...(run.mediaUrls.mockups ?? [])] }
       : { mockups: [] };
 
-    // 3) Mockup'lar (8 sahne) — mockups dizisi henüz hiç kaydedilmemişse üret.
+    // 3) Mockup'lar (8 sahne). Parti tamamlanmadıysa YALNIZ boş slotlar üretilir.
     // HIZ: 27MB master yerine küçültülmüş kaynak (1536px JPEG) yüklenir; aynı kaynak gate-3 regen'de kullanılır.
-    if (media.mockups.length === 0) {
-      const mockupSource = await sharp(master)
-        .resize(1536, 1536, { fit: 'inside' })
-        .jpeg({ quality: 90 })
-        .toBuffer();
-      await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
+    // MALİYET: her mockup BİTTİĞİ ANDA kaydedilir (eskiden 8'i bitince topluca yazılıyordu — yarıda
+    // çökme 8'ini de yeniden ödetiyordu). `mockupsComplete` parti bitince işaretlenir; sonra boş kalan
+    // (başarısız) slotlar otomatik yeniden ÜRETİLMEZ — gate 3'te kullanıcı tek tek yeniler.
+    // Bu kuraldan ÖNCE tamamlanmış run'larda işaret yoktur: dizi dolu ve parti "başladı" işareti yoksa
+    // tamamlanmış sayılır (boş slotları sessizce yeniden ödenmesin).
+    const batchDone = media.mockupsComplete || (media.mockups.length > 0 && !media.mockupsStarted);
+    if (!batchDone) {
+      const mockups: string[] = cfg.mockupScenes.map((_, i) => media.mockups[i] ?? '');
+      const pending = mockups.map((u, i) => (u ? -1 : i)).filter((i) => i >= 0);
+      media.mockupsStarted = true;
+      await updatePipelineRun(runId, { mediaUrls: { ...media, mockups: [...mockups] } });
+      if (pending.length > 0) {
+        const mockupSource = await sharp(master)
+          .resize(1536, 1536, { fit: 'inside' })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+        await putObject(`runs/${runId}/mockup-source.jpg`, mockupSource, 'image/jpeg');
 
-      try {
-        // Her mockup üretildiği anda depoya yazılır (buffer'lar birikmesin — bkz. generateAllMockups).
-        // Sahneler paralel bittiği için sıra garanti değil; bu yüzden index'e göre yerleştirilir.
-        const mockups: string[] = cfg.mockupScenes.map(() => '');
-        await generateAllMockups(mockupSource, cfg.mockupScenes, async (r) => {
-          if (r.ok && r.buffer) {
-            mockups[r.index] = await putObject(
-              `runs/${runId}/mockup-${r.index}.jpg`,
-              r.buffer,
-              r.contentType ?? 'image/jpeg',
-            );
-          }
-          // Başarısız sahne '' kalır — boş slot, gate 3'te yeniden üretilebilir.
-        });
-        media.mockups = mockups;
-      } catch (e) {
-        console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);
-        media.mockups = cfg.mockupScenes.map(() => '');
+        // Paralel tamamlanan sahnelerin DB yazımı tek zincirde sıralanır (yazma yarışı olmasın).
+        let saveChain: Promise<void> = Promise.resolve();
+        let failed = 0;
+        try {
+          await generateAllMockups(
+            mockupSource,
+            pending.map((i) => cfg.mockupScenes[i]),
+            async (r) => {
+              const slot = pending[r.index];
+              if (r.ok && r.buffer) {
+                mockups[slot] = await putObject(`runs/${runId}/mockup-${slot}.jpg`, r.buffer, r.contentType ?? 'image/jpeg');
+                saveChain = saveChain.then(() =>
+                  updatePipelineRun(runId, { mediaUrls: { ...media, mockups: [...mockups] } }),
+                );
+                await saveChain;
+              } else {
+                failed++; // boş slot — gate 3'te yeniden üretilebilir
+              }
+            },
+          );
+        } catch (e) {
+          console.warn('[pipeline] mockup üretimi atlandı:', e instanceof Error ? e.message : e);
+        }
+        await appendRunUsage(runId, [
+          {
+            step: 'mockup',
+            model: MOCKUP_MODEL,
+            units: pending.length,
+            unit: 'image',
+            unitPriceUsd: FAL_PRICES.kontextPerImage,
+            at: new Date().toISOString(),
+            note: failed ? `${failed} sahne başarısız (faturalanmış olabilir)` : undefined,
+          },
+        ]);
       }
-      await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: mockup'lar
+      media.mockups = mockups;
+      media.mockupsComplete = true;
+      await updatePipelineRun(runId, { mediaUrls: media }); // checkpoint: mockup partisi bitti
     }
 
     // 4) Zoom video (birincil mockup, yoksa master'dan) — yoksa üret.
@@ -395,7 +449,20 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
  * sweeper'ı onu hiç sürdürmez — kiraya ihtiyaç yok. Dahası kullanıcı farklı sahneleri arka arkaya
  * yeniden üretebilmeli; kira ikinci isteği sessizce düşürüp UI'yi sonsuz spinner'da bırakırdı.
  */
+/**
+ * Süreç içi kilit: aynı slot için ikinci yeniden üretim (çift tık) ikinci kez ÖDENMESİN.
+ * Farklı slotlar paralel yenilenebilir (UI bunu destekliyor).
+ */
+const regenInFlight = new Set<string>();
+
+export function isMockupRegenerating(runId: string, index: number): boolean {
+  return regenInFlight.has(`${runId}:${index}`);
+}
+
 export async function regenerateMockup(runId: string, index: number): Promise<void> {
+  const lockKey = `${runId}:${index}`;
+  if (regenInFlight.has(lockKey)) return;
+  regenInFlight.add(lockKey);
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -414,15 +481,34 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
     }
     const masterUrl = await uploadBuffer(source, 'image/jpeg', 'mockup-source.jpg');
     const seed = Math.floor(Math.random() * 2_000_000_000); // farklı çıktı için
-    const { buffer, contentType } = await generateMockup(masterUrl, scene, seed);
-    const url = await putObject(`runs/${runId}/mockup-${index}-${Date.now()}.jpg`, buffer, contentType);
+    let result: Awaited<ReturnType<typeof generateMockup>> | undefined;
+    try {
+      result = await generateMockup(masterUrl, scene, seed);
+    } finally {
+      await appendRunUsage(runId, [
+        {
+          step: 'mockup_regen',
+          model: MOCKUP_MODEL,
+          units: 1,
+          unit: 'image',
+          unitPriceUsd: FAL_PRICES.kontextPerImage,
+          at: new Date().toISOString(),
+          note: result ? `slot ${index}` : `slot ${index} — BAŞARISIZ (faturalanmış olabilir)`,
+        },
+      ]);
+    }
+    const url = await putObject(`runs/${runId}/mockup-${index}-${Date.now()}.jpg`, result.buffer, result.contentType);
 
-    const mockups = [...(run.mediaUrls?.mockups ?? [])];
+    // TAZE oku: başlangıçtaki kopyaya yazmak, aynı anda yenilenen BAŞKA bir slotun sonucunu siliyordu.
+    const fresh = await getPipelineRun(runId);
+    const mockups = [...(fresh?.mediaUrls?.mockups ?? [])];
     while (mockups.length <= index) mockups.push('');
     mockups[index] = url;
-    await updatePipelineRun(runId, { mediaUrls: { ...run.mediaUrls, mockups } });
+    await updatePipelineRun(runId, { mediaUrls: { ...fresh?.mediaUrls, mockups } });
   } catch (err) {
     await fail(runId, err);
+  } finally {
+    regenInFlight.delete(lockKey);
   }
 }
 

@@ -29,6 +29,7 @@ import {
 import { apiFetch } from '@/lib/client/api';
 import { ERROR_KIND_META, STATUS_META } from '@/lib/status';
 import { formatTr } from '@/lib/format';
+import { FAL_PRICES, formatUsd } from '@/lib/cost/prices';
 import {
   PRODUCT_OPTIONS,
   WORKING,
@@ -757,6 +758,10 @@ export default function GeneratePage() {
               {busy ? <Spinner /> : null}
               {busy ? 'Başlatılıyor…' : `${variations} varyasyon üret`}
             </Button>
+            <p className="mt-2 text-xs text-ink-muted">
+              Tahmini maliyet ≈ {formatUsd(variations * FAL_PRICES.kontextPerImage)} (
+              {model === 'flux' || referenceFile ? 'fal FLUX' : 'Google Imagen'}, görsel başına ~$0.04, liste fiyatı).
+            </p>
             {!prompt.trim() ? (
               <p className="mt-2 text-xs text-ink-muted">Başlamak için önce bir prompt yaz.</p>
             ) : null}

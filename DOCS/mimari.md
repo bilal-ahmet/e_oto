@@ -120,3 +120,35 @@ varyasyon sayısı/model/maliyet kaydı (gerçek maliyet API'den alınamıyorsa 
 
 İzleme: `npm run etsy:snapshot -- <id…>` salt okunur anlık görüntü alır (`snapshots/`, gitignore);
 iki görüntü `diff` ile karşılaştırılır. Çevrimdışı kural kontrolü: `npm run check:rules`.
+
+---
+
+## 7. fal.ai maliyet turu (2026-11-03)
+
+Kullanıcı beklentisinden fazla ödeme şüphesiyle incelendi. Liste fiyatları:
+- clarity-upscaler: ÇIKTI megapikseli başına $0.03.
+- flux-pro/kontext (varyasyon, mockup): görsel başına $0.04.
+
+Yayına giden bir FLUX baskı run'ı tahminen ≈ $0.98 tutar:
+
+| Kalem | Tutar |
+|---|---|
+| 3 varyasyon | $0.12 |
+| ×4 upscale | $0.50 |
+| 8 mockup | $0.32 |
+| Claude SEO | ~$0.04 |
+
+| Karar | Gerekçe | Nerede |
+|---|---|---|
+| Upscale oranı hedef dosya boyutuna + `UPSCALE_MAX_OUTPUT_MP` (17) tavanına göre; ×2 bile tavanı aşıyorsa AI upscale atlanır | Her girdi ×4'tü; büyük taslak yüklemesi tek upscale'de $3–10 tutabiliyordu. FLUX baskıda kalite/maliyet değişmedi | `upscale/plan.ts` |
+| Master URL'i upscale'den HEMEN sonra kaydedilir | Paketleme (OOM'a yatkın) çökünce kurtarma her denemede upscale'i yeniden ödüyordu | `run.ts approveSeoAndProcess` |
+| Mockup'lar tek tek kaydedilir; parti yarıda kaldıysa yalnız boş slotlar üretilir (`mockupsStarted/Complete`) | 8'i topluca yazılıyordu; yarıda çökme 8'ini de yeniden ödetiyordu | `run.ts` |
+| Zaman aşımında fal işi `queue.cancel` ile iptal edilir (en iyi çaba) | Beklemeyi bırakmak işi durdurmuyordu; iş faturalanıyor, kullanıcı tekrar tetikliyordu | `lib/fal/index.ts` |
+| Mockup yeniden üretiminde slot kilidi + taze okuma | Çift tık iki kez ödeniyordu; eşzamanlı iki slotta biri diğerinin sonucunu siliyordu | `run.ts regenerateMockup` |
+| Her fal çağrısı `pipeline_runs.usage`'a yazılır (liste fiyatından TAHMİN, etiketli) | Hangi run'ın ne harcadığı bilinmiyordu | `cost/prices.ts`, migration 0013 |
+
+Gerçek fatura: `npm run fal:usage` (fal kullanım API'si, `FAL_BILLING_KEY` gerekir — üretim `FAL_KEY`'i 403 döner).
+Önerilen ama uygulanmayanlar:
+- Real-ESRGAN (~1–2 sent/upscale, kalite testi gerekir).
+- Mockup sayısını azaltmak.
+- Claude'u `claude-opus-5-5`'e geçirmek (run başına birkaç sent).

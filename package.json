@@ -10,7 +10,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "auth:hash": "tsx scripts/hash-password.ts",
     "check:rules": "tsx scripts/check-rules.ts",
-    "etsy:snapshot": "tsx scripts/snapshot-listings.ts"
+    "etsy:snapshot": "tsx scripts/snapshot-listings.ts",
+    "fal:usage": "tsx scripts/fal-usage.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

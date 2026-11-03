@@ -6,7 +6,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPipelineRun } from '@/lib/db/queries';
-import { regenerateMockup } from '@/lib/pipeline/run';
+import { isMockupRegenerating, regenerateMockup } from '@/lib/pipeline/run';
 
 export async function POST(req: NextRequest) {
   let body: { id?: string; index?: number };
@@ -24,6 +24,11 @@ export async function POST(req: NextRequest) {
   if (!run) return NextResponse.json({ error: 'Run bulunamadı.' }, { status: 404 });
   if (run.status !== 'awaiting_publish') {
     return NextResponse.json({ error: `Bu adımda mockup üretilemez (durum: ${run.status}).` }, { status: 409 });
+  }
+
+  // Aynı slot zaten üretiliyorsa ikinci istek ikinci kez ÖDENMESİN (çift tık).
+  if (isMockupRegenerating(id, index)) {
+    return NextResponse.json({ error: 'Bu mockup zaten yeniden üretiliyor — bitmesini bekleyin.' }, { status: 409 });
   }
 
   void regenerateMockup(id, index);

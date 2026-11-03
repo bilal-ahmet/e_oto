@@ -8,7 +8,8 @@ import { falSubscribe, uploadBuffer, downloadImage } from '@/lib/fal';
 import { TIMEOUTS } from '@/lib/async/timeout';
 import { type MockupScene } from './scenes';
 
-const MODEL = 'fal-ai/flux-pro/kontext';
+export const MOCKUP_MODEL = 'fal-ai/flux-pro/kontext';
+const MODEL = MOCKUP_MODEL;
 
 interface KontextImage {
   url: string;

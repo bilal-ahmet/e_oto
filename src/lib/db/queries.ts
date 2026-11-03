@@ -37,6 +37,7 @@ import type {
   ProductType,
   PublishProgress,
   SeoData,
+  UsageEntry,
 } from '@/types';
 
 // ── Yardımcılar ──────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ function rowToPipelineRun(row: PipelineRunRow): PipelineRun {
     etsyStateCheckedAt: row.etsyStateCheckedAt?.toISOString(),
     pinterestBoardId: row.pinterestBoardId ?? undefined,
     pinAttemptedAt: row.pinAttemptedAt?.toISOString(),
+    usage: (row.usage as UsageEntry[]) ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -340,6 +342,35 @@ export async function pipelineRunStatusCounts(): Promise<Record<string, number>>
     .from(pipelineRuns)
     .groupBy(sql`1`);
   return Object.fromEntries(rows.map((r) => [r.key, r.n]));
+}
+
+/**
+ * Run'a ücretli çağrı kaydı EKLER — tek atomik UPDATE (`usage || $entries`). Mockup'lar paralel
+ * tamamlandığı için oku-değiştir-yaz yarışında kayıt kaybolmasın. `updated_at`'e dokunmaz
+ * (kurtarma sweeper'ının "askıda" kararını etkilemesin). Hata akışı bozmasın diye yutulur.
+ */
+export async function appendRunUsage(id: string, entries: UsageEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  try {
+    await db
+      .update(pipelineRuns)
+      .set({ usage: sql`coalesce(${pipelineRuns.usage}, '[]'::jsonb) || ${JSON.stringify(entries)}::jsonb` })
+      .where(eq(pipelineRuns.id, id));
+  } catch (e) {
+    console.warn(`[usage] run ${id} kullanım kaydı yazılamadı:`, e instanceof Error ? e.message : e);
+  }
+}
+
+/** Son `days` gündeki ücretli fal çağrılarının liste fiyatından TAHMİNİ toplamı (USD). */
+export async function estimatedFalSpend(days = 30): Promise<{ usd: number; calls: number }> {
+  const rows = await db.execute<{ usd: string | null; calls: number }>(sql`
+    SELECT coalesce(sum((e->>'units')::numeric * (e->>'unitPriceUsd')::numeric), 0) AS usd,
+           count(*)::int AS calls
+    FROM ${pipelineRuns}, jsonb_array_elements(coalesce(${pipelineRuns.usage}, '[]'::jsonb)) AS e
+    WHERE (e->>'at')::timestamptz > now() - make_interval(days => ${days})
+  `);
+  const r = rows.rows[0];
+  return { usd: Number(r?.usd ?? 0), calls: Number(r?.calls ?? 0) };
 }
 
 /** Etsy'de listing'i olan run'lar — salt okunur durum kontrolü için (en yeni önce). */

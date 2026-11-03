@@ -228,7 +228,7 @@ export function PublishReview({
                     disabled={busy || isRegen || regenIndex !== null}
                     className="cursor-pointer rounded-full px-2 py-1 text-sm font-medium text-ink-muted transition-colors hover:bg-shade hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isRegen ? 'Üretiliyor…' : '↻ Yeniden üret'}
+                    {isRegen ? 'Üretiliyor…' : '↻ Yeniden üret (~$0.04)'}
                   </button>
                 </div>
               </div>

@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { DEFAULT_UPSCALE_MAX_MP } from '@/lib/cost/prices';
 
 // .env'de boş bırakılan değişkenler '' olarak gelir; opsiyonel alanlar için bunu undefined say.
 const emptyToUndef = (v: unknown) => (v === '' ? undefined : v);
@@ -38,6 +39,11 @@ const schema = z.object({
   // Faz 4 — Görsel üretim (şimdi opsiyonel)
   GOOGLE_API_KEY: optStr(), // Imagen (Google AI Studio)
   FAL_KEY: optStr(), // fal.ai — FLUX.1 Kontext [pro] + clarity-upscaler
+  // fal faturalama okuma anahtarı (Billing ön ayarı) — yalnız scripts/fal-usage.ts kullanır; üretimde gerekmez.
+  FAL_BILLING_KEY: optStr(),
+  // clarity-upscaler ÇIKTI megapikseli tavanı (fal MP başına ücretlendirir). Büyütme oranı buna göre seçilir;
+  // girdi zaten büyükse AI upscale atlanır. Bkz. lib/upscale/client.ts.
+  UPSCALE_MAX_OUTPUT_MP: z.preprocess(emptyToUndef, z.coerce.number().positive().default(DEFAULT_UPSCALE_MAX_MP)),
   ETSY_SHOP_NAME: z.preprocess(emptyToUndef, z.string().default(DEFAULT_SHOP_NAME)), // açıklama TERMS/telif
   // Lokal disk depolama için public URL tabanı (DO Spaces yoksa).
   PUBLIC_BASE_URL: z.preprocess(emptyToUndef, z.string().url().default('http://localhost:3000')),

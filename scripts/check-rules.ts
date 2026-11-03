@@ -13,6 +13,7 @@
 import { sharp } from '../src/lib/image/sharp';
 import { toEtsySafe, validateListingSeo, AI_DISCLOSURE_TEXT } from '../src/lib/etsy/text-rules';
 import { PackageValidator, assertFileKeys } from '../src/lib/packaging/validate';
+import { planUpscale } from '../src/lib/upscale/plan';
 import type { DigitalFileSpec } from '../src/lib/product/config';
 import type { SeoData } from '../src/types';
 
@@ -60,6 +61,25 @@ expect('AI beyanı olmayan açıklama reddedilir', fields(seo({ description: 'Ni
 expect('"&" iki kez: toEtsySafe ikinciyi "and" yapar ve geçer', !fields(seo({ title: 'Rust & Sage | Boho & Calm Wall Art' })).includes('title'));
 expect('Emoji içeren başlık temizlenip geçer', !fields(seo({ title: 'Christmas Tree 🎄 Wall Art' })).includes('title'));
 expect('Düzgün SEO hiç ihlal üretmez', validateListingSeo(toEtsySafe(seo({}))).length === 0, validateListingSeo(toEtsySafe(seo({}))));
+
+// ── 2b) Upscale planı (clarity MP başına ücretlendirir — tavan 17 MP) ─────────
+{
+  const print = [{ width: 7200, height: 10800 }, { width: 7500, height: 10500 }];
+  const tv = [{ width: 3840, height: 2160 }, { width: 1920, height: 1080 }];
+  const cases: [string, number, number, typeof print, number][] = [
+    ['FLUX baskı 880×1184 → ×4 (16.7 MP, bugünkü kalite)', 880, 1184, print, 4],
+    ['FLUX TV 1392×784 → ×3 (4K için yeterli)', 1392, 784, tv, 3],
+    ['Imagen 896×1280 → ×3', 896, 1280, print, 3],
+    ['Taslak 2048×2730 → atla (×2 bile 22 MP)', 2048, 2730, print, 0],
+    ['Taslak 4000×5333 → atla', 4000, 5333, print, 0],
+    ['TV taslağı 3840×2160 → atla (zaten hedefte)', 3840, 2160, tv, 0],
+  ];
+  for (const [name, w, h, targets, want] of cases) {
+    const p = planUpscale(w, h, targets, 17);
+    // Atlanan durumda AI çıktısı yok (maliyet $0) — tavan yalnız gerçekten büyütülen çıktıya uygulanır.
+    expect(`upscale: ${name}`, p.factor === want && (p.factor === 0 || p.outMp <= 17), { factor: p.factor, outMp: p.outMp.toFixed(1), skip: p.skipReason });
+  }
+}
 
 // ── 3) Paket doğrulaması (yerel sahte dosyalar) ──────────────────────────────
 async function jpeg(w: number, h: number, color: string): Promise<Buffer> {

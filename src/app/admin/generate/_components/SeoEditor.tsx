@@ -5,6 +5,7 @@ import Image from 'next/image';
 import type { ProductType, SeoData } from '@/types';
 import { Button, Card, Chevron, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner, Textarea } from '@/components/ui';
 import { previewAspectClass } from './shared';
+import { approveCostCeiling, formatUsd } from '@/lib/cost/prices';
 import {
   AI_DISCLOSURE_TEXT,
   MAX_CAPS_WORDS,
@@ -272,6 +273,10 @@ ${AI_DISCLOSURE_TEXT}`)
           {busy ? <Spinner /> : null}
           Onayla — medya &amp; dosyaları üret
         </Button>
+        <span className="self-center text-xs text-ink-muted">
+          Ücretli adımlar başlar: upscale (en fazla {formatUsd(approveCostCeiling().upscale)}) + 8 mockup (
+          {formatUsd(approveCostCeiling().mockups)}) — tahmini, liste fiyatı.
+        </span>
         {issues.length > 0 ? (
           <span className="self-center text-sm font-medium text-state-error-ink">
             {issues.length} alan Etsy kurallarına uymuyor — işaretli alanları düzelt.

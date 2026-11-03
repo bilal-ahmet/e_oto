@@ -6,11 +6,13 @@ import { EtsyStateCheckButton } from '@/components/EtsyStateCheckButton';
 import { EtsyConnection } from '@/components/EtsyConnection';
 import { PinterestConnection } from '@/components/PinterestConnection';
 import {
+  estimatedFalSpend,
   listCompetitorListings,
   listCompetitorShops,
   listPipelineRuns,
   pipelineRunStatusCounts,
 } from '@/lib/db/queries';
+import { formatUsd, sumUsd } from '@/lib/cost/prices';
 import { ERROR_KIND_META, STATUS_META, displayStatus, listingStateLabel } from '@/lib/status';
 import { formatTr } from '@/lib/format';
 
@@ -64,12 +66,14 @@ export default async function DashboardPage({
   const page = Math.min(Math.max(Number(p) || 1, 1), pageCount);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [runs, listings, shops] = await Promise.all([
+  const [runs, listings, shops, falSpend] = await Promise.all([
     listPipelineRuns(PAGE_SIZE, offset),
     // Yalnızca ilk 5 gösteriliyor → sınırı SQL'e ver. Sorgu zaten opportunity_score DESC sıralı
     // döndüğü için burada tekrar sıralamaya da gerek yok.
     listCompetitorListings(undefined, 5),
     listCompetitorShops(),
+    // Yalnız kayıt tutulmaya başlandıktan sonraki çağrıları kapsar (0013 öncesi run'larda kayıt yok).
+    estimatedFalSpend(30),
   ]);
 
   // Sayaçlar TÜM kayıtlar üzerinden (ekrandaki sayfadan değil — yoksa sayfa değişince rakam değişirdi).
@@ -136,6 +140,10 @@ export default async function DashboardPage({
         <p className="text-xs text-ink-muted">
           Toplam {total} çalıştırma. Hat ilanları Etsy’ye <strong>taslak</strong> olarak aktarır; aktif
           sayısı yalnız Etsy’den salt okunur geri okunan durumdur.
+          <br />
+          Son 30 gün tahmini fal harcaması: <strong>{formatUsd(falSpend.usd)}</strong> ({falSpend.calls} kayıt; liste
+          fiyatından tahmin, kayıt tutulmaya başlandığı andan itibaren). Gerçek tutar fal panelinde /{' '}
+          <code className="font-mono">npm run fal:usage</code>.
         </p>
         <EtsyStateCheckButton />
       </div>
@@ -203,6 +211,7 @@ export default async function DashboardPage({
                           <StatusBadge status={shown} />
                           <p className="mt-1.5 font-mono text-label tabular-nums text-ink-faint">
                             {formatDate(run.updatedAt)} · {run.id.slice(0, 8)}
+                            {run.usage?.length ? ` · fal ≈ ${formatUsd(sumUsd(run.usage))}` : ''}
                           </p>
                         </div>
                       </li>

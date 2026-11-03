@@ -64,6 +64,17 @@ Bu adım canlıda OOM'a ve bitmeyen run döngüsüne yol açmıştı; nedenler *
 - Upscale pass-through'a düşerse ya da master hedeften küçükse sebep **run uyarısına** yazılır
   (gate 3'te görünür) — yalnız `console.warn` yetmez.
 
+## Maliyet sözleşmesi (fal) — ayrıntı ve gerekçe: `DOCS/mimari.md` §7
+
+- clarity-upscaler **çıktı MP başına** ücretlendirir: oran `planUpscale` (`upscale/plan.ts`) ile hedef
+  dosya boyutu + `UPSCALE_MAX_OUTPUT_MP` (17) tavanından seçilir; ×2 tavanı aşıyorsa AI upscale ATLANIR.
+  Sabit ×4'e geri dönme.
+- Ücretli sonuç **üretildiği anda** checkpoint'lenir: master URL upscale'den hemen sonra, mockup'lar
+  tek tek. Yeni ücretli adım eklerken checkpoint'ini de ekle — kurtarma sweeper'ı kaydedilmemiş işi
+  yeniden öder.
+- Her fal çağrısı `appendRunUsage` ile kaydedilir (atomik; liste fiyatı `cost/prices.ts`). Tüm fal
+  çağrıları `falSubscribe`'tan geçer (zaman aşımında `queue.cancel`) — doğrudan `fal.subscribe` çağırma.
+
 ## Medya üretimi
 
 `approveSeoAndProcess` (`pipeline/run.ts`): upscale (fal clarity-upscaler ×4, creativity 0.3) →

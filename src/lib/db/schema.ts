@@ -15,7 +15,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { DigitalFileUrls, ErrorKind, ImageModel, MediaUrls, PipelineStatus, ProductType, PublishProgress, SeoData } from '@/types';
+import type { DigitalFileUrls, ErrorKind, ImageModel, MediaUrls, PipelineStatus, ProductType, PublishProgress, SeoData, UsageEntry } from '@/types';
 
 // ────────────────────────────────────────────────────────────────────────────
 // oauth_tokens
@@ -69,6 +69,8 @@ export const pipelineRuns = pgTable('pipeline_runs', {
   // Pinterest: pin'in atıldığı pano + POST /pins denemesinin başladığı an (çift pin mutabakatı).
   pinterestBoardId: text('pinterest_board_id'),
   pinAttemptedAt: timestamp('pin_attempted_at', { withTimezone: true }),
+  // Ücretli fal çağrıları (0013) — tahmini maliyet; yalnız `appendRunUsage` ile atomik eklenir.
+  usage: jsonb('usage').$type<UsageEntry[]>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

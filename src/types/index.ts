@@ -79,6 +79,10 @@ export type DigitalFileUrls = Record<string, string>;
 /** Etsy'ye yüklenecek tanıtım medyası (8 mockup + 1 video + 1 ölçü görseli). */
 export interface MediaUrls {
   mockups: string[]; // 8 sahne mockup'ı (fal flux-kontext); boş slot olabilir
+  /** Mockup partisi tamamlandı — sonra boş slotlar otomatik yeniden üretilmez (yalnız gate 3'te elle). */
+  mockupsComplete?: boolean;
+  /** Parti başladı (yarıda kalmışsa kurtarma YALNIZ boş slotları üretir). */
+  mockupsStarted?: boolean;
   video?: string; // zoom mp4 (ffmpeg)
   sizeGuide?: string; // sabit ölçü görseli
   /**
@@ -144,6 +148,20 @@ export interface PublishProgress {
   warnings?: string[];
 }
 
+/**
+ * Ücretli bir fal çağrısının kaydı (pipeline_runs.usage). Tutar LİSTE fiyatından tahmindir
+ * (`lib/cost/prices.ts`); gerçek fatura fal kullanım API'sindedir.
+ */
+export interface UsageEntry {
+  step: 'variations' | 'upscale' | 'mockup' | 'mockup_regen';
+  model: string; // fal endpoint id
+  units: number; // görsel adedi ya da çıktı megapikseli
+  unit: 'image' | 'megapixel';
+  unitPriceUsd: number;
+  at: string; // ISO 8601
+  note?: string; // ör. "×3, 1392×784 → 4176×2352" ya da "başarısız/zaman aşımı"
+}
+
 export interface PipelineRun {
   id: string;
   status: PipelineStatus;
@@ -169,6 +187,7 @@ export interface PipelineRun {
   etsyStateCheckedAt?: string; // ISO 8601 — son okuma denemesi
   pinterestBoardId?: string; // pin'in atıldığı pano
   pinAttemptedAt?: string; // ISO 8601 — POST /pins denemesi başladı (sonuç belirsizse mutabakat)
+  usage?: UsageEntry[]; // ücretli fal çağrıları (tahmini maliyet — lib/cost/prices.ts)
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }
