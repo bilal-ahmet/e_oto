@@ -81,6 +81,11 @@ export interface MediaUrls {
   mockups: string[]; // 8 sahne mockup'ı (fal flux-kontext); boş slot olabilir
   video?: string; // zoom mp4 (ffmpeg)
   sizeGuide?: string; // sabit ölçü görseli
+  /**
+   * Eserin DÜZ önizlemesi (uzun kenar 2000 px). Etsy: görsel içerikli dijital üründe "alıcının
+   * alacağı gerçek içeriğin önizlemesi" ilanda bulunmalı — mockup'lar tek başına yetmez.
+   */
+  preview?: string;
 }
 
 /** Etsy listing öznitelikleri (taksonomi property'lerinden seçilir). */
@@ -121,6 +126,10 @@ export interface PinCopy {
 export interface PublishProgress {
   price?: number; // resume'da kullanmak üzere kalıcı yayın parametreleri
   thumbnailIndex?: number;
+  /** Etsy mağaza bölümü (section); null = bölümsüz. Yalnız taslak OLUŞTURULURKEN gönderilir. */
+  shopSectionId?: number | null;
+  /** Görsel sırası önizlemeli (kapak → önizleme → mockup'lar). Eski, yarıda kalmış yayınlar eski sırayla sürer. */
+  previewInOrder?: boolean;
   listingId?: number; // taslak oluşturuldu (etsyListingId ile aynı) → resume'da yeniden oluşturma
   attributesDone?: boolean; // öznitelikler yazıldı
   imagesUploaded?: number; // ordered görsel dizisinden kaç mockup yüklendi (sıralı checkpoint)

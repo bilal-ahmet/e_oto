@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import type { PipelineRun } from '@/types';
 import { defaultPrice } from '@/lib/product/pricing';
-import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner } from '@/components/ui';
+import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Select, Spinner } from '@/components/ui';
+import { apiFetch } from '@/lib/client/api';
 import { mockupAspectClass, fileLabel, filesSummary } from './shared';
 import { PipelineWarnings } from './PipelineWarnings';
 import { SeoSummary } from './SeoSummary';
@@ -22,7 +23,7 @@ export function PublishReview({
   run: PipelineRun;
   busy: boolean;
   regenIndex: number | null;
-  onPublish: (price: number, thumbnailIndex: number) => void;
+  onPublish: (price: number, thumbnailIndex: number, shopSectionId: number | null) => void;
   onRegenerate: (index: number) => void;
   onReject: () => void;
   /** Gate 3 → gate 2: metin düzeltmesi için (üretilmiş medya/dosyalar korunur). */
@@ -32,7 +33,34 @@ export function PublishReview({
   const files = run.digitalFileUrls ? Object.entries(run.digitalFileUrls) : [];
   const mockups = run.mediaUrls?.mockups ?? [];
   const filledMockups = mockups.filter(Boolean).length;
-  const imageCount = filledMockups + (run.mediaUrls?.sizeGuide ? 1 : 0);
+  // +1: eserin düz önizlemesi (yayında 2. görsel olarak eklenir — Etsy dijital ürün kuralı). Tavan 10.
+  const imageCount = Math.min(filledMockups + 1 + (run.mediaUrls?.sizeGuide ? 1 : 0), 10);
+
+  // Etsy mağaza bölümü (section) — liste bir kez çekilir; varsayılan ürün tipinin son seçimidir.
+  const [sections, setSections] = useState<{ id: number; title: string }[]>([]);
+  const [sectionId, setSectionId] = useState<string>('');
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    apiFetch(`/api/etsy/sections?productType=${run.productType ?? 'print'}`)
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as {
+          sections?: { id: number; title: string }[];
+          defaultSectionId?: number | null;
+          error?: string;
+        };
+        if (!alive) return;
+        if (!res.ok) throw new Error(data.error ?? `Sunucu ${res.status} döndü.`);
+        setSections(data.sections ?? []);
+        setSectionId(data.defaultSectionId ? String(data.defaultSectionId) : '');
+      })
+      .catch((e: unknown) => {
+        if (alive) setSectionsError(e instanceof Error ? e.message : 'Bölümler alınamadı.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [run.productType]);
   // Sunucu (publishToEtsy) aynı kuralları Etsy'ye istek atmadan uygular; burada önceden gösterilir.
   const seoIssues = run.seo ? validateListingSeo(toEtsySafe(run.seo)) : [];
   const blocked = filledMockups === 0 || seoIssues.length > 0;
@@ -75,9 +103,29 @@ export function PublishReview({
             </div>
           </Field>
 
+          <Field
+            label="Etsy bölümü"
+            htmlFor="publish-section"
+            hint={sectionsError ?? 'Bölümler Etsy panelinden açılır; seçim bu ürün tipi için hatırlanır.'}
+          >
+            <Select
+              id="publish-section"
+              value={sectionId}
+              onChange={(e) => setSectionId(e.target.value)}
+              className="w-56"
+            >
+              <option value="">Bölümsüz</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              onClick={() => onPublish(price, thumbnailIndex)}
+              onClick={() => onPublish(price, thumbnailIndex, sectionId ? Number(sectionId) : null)}
               disabled={busy || blocked || regenIndex !== null}
             >
               {busy ? <Spinner /> : null}
@@ -92,6 +140,10 @@ export function PublishReview({
         <p className="mt-3 text-sm tabular-nums text-ink-muted">
           {imageCount} görsel{run.mediaUrls?.video ? ' · 1 video' : ''} · {files.length} JPG · kapak #
           {thumbnailIndex + 1}
+        </p>
+        <p className="mt-1 text-xs text-ink-muted">
+          Kapaktan sonra eserin düz önizlemesi eklenir — Etsy dijital üründe alıcının alacağı gerçek
+          içeriğin önizlemesini istiyor.
         </p>
 
         {/* Engelleyici uyarı butonun 300px altında değil, kararın YANINDA. */}

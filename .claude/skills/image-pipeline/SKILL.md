@@ -72,4 +72,6 @@ ffmpeg-static — sistem ffmpeg gerektirmez), 1 ölçü görseli (`getSizeGuide`
 SVG → JPEG koddan üretilir, süreç boyunca cache'lenir; metin için konteynerde `fonts-dejavu-core`
 şart). Elle konmuş statik ölçü görseli KULLANMA — dosyalarla senkron kalmıyordu.
 **fal kredisi yoksa run DÜŞMEZ**: upscale pass-through (`upscale/client.ts`), mockup'lar boş slot
-kalır ve gate 3'te tek tek yeniden üretilir. Ham sanat görseli Etsy'ye display olarak yüklenmez.
+kalır ve gate 3'te tek tek yeniden üretilir. İşlemenin sonunda master'dan **düz önizleme**
+(`runs/<id>/preview.jpg`, uzun kenar 2000 px — baskıya yetmez) üretilir; yayında rank 2'ye yüklenir
+(Etsy dijital ürün görsel kuralı). Önizlemesi olmayan eski run'larda `publishToEtsy` üretir (`ensurePreview`).

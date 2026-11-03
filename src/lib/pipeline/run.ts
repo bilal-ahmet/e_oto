@@ -377,6 +377,11 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       }
     }
 
+    // 6) Eserin düz önizlemesi (Etsy dijital ürün kuralı) — master zaten bellekte, yoksa üret.
+    if (!media.preview) {
+      media.preview = await putObject(`runs/${runId}/preview.jpg`, await buildPreview(master), 'image/jpeg');
+    }
+
     await updatePipelineRun(runId, { mediaUrls: media, status: 'awaiting_publish', attempts: 0 });
   } catch (err) {
     await fail(runId, err);
@@ -425,11 +430,21 @@ export async function regenerateMockup(runId: string, index: number): Promise<vo
  * Kapı 3 onayı — Etsy taslak listing + öznitelikler + medya (9 görsel + video) + dijital dosyalar (taslak kalır).
  * @param thumbnailIndex Seçilen mockup index'i; ilk yüklenir (Etsy birincil/thumbnail = ilk görsel).
  */
-export async function publishToEtsy(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
-  return withRunLease(runId, 'publishToEtsy', () => publishToEtsyInner(runId, price, thumbnailIndex));
+export async function publishToEtsy(
+  runId: string,
+  price?: number,
+  thumbnailIndex?: number,
+  shopSectionId?: number | null,
+): Promise<void> {
+  return withRunLease(runId, 'publishToEtsy', () => publishToEtsyInner(runId, price, thumbnailIndex, shopSectionId));
 }
 
-async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?: number): Promise<void> {
+async function publishToEtsyInner(
+  runId: string,
+  price?: number,
+  thumbnailIndex?: number,
+  shopSectionId?: number | null,
+): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
@@ -441,6 +456,8 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
     const pp: PublishProgress = { ...(run.publishProgress ?? {}) };
     pp.price = price ?? pp.price ?? productConfig(run.productType).defaultPrice;
     pp.thumbnailIndex = thumbnailIndex ?? pp.thumbnailIndex ?? 0;
+    // undefined = çağrıda yok (checkpoint korunur); null = bilinçli bölümsüz.
+    pp.shopSectionId = shopSectionId !== undefined ? shopSectionId : (pp.shopSectionId ?? null);
     const effThumb = pp.thumbnailIndex;
 
     await updatePipelineRun(runId, { status: 'publishing_etsy', publishProgress: pp, errorMessage: null });
@@ -470,7 +487,7 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
 
     // 1) Taslak listing — varsa (checkpoint/etsyListingId) YENİDEN OLUŞTURMA (çift listing önlenir).
     if (!listingId) {
-      listingId = await createDraftListing(shopId, seo, pp.price);
+      listingId = await createDraftListing(shopId, seo, pp.price, pp.shopSectionId);
       pp.listingId = listingId;
       await updatePipelineRun(runId, { etsyListingId: listingId, publishProgress: pp });
     }
@@ -491,24 +508,42 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
     }
 
     // Görsel sırası: seçilen thumbnail mockup EN BAŞA (Etsy ilk görseli thumbnail yapar), diğerleri, en sona ölçü.
-    const allMockups = run.mediaUrls?.mockups ?? [];
-    const ordered: string[] = [];
-    if (allMockups[effThumb]) ordered.push(allMockups[effThumb]);
+    // Önizleme sırası yalnız görsel yüklemesi BAŞLAMAMIŞSA devreye girer — deploy anında yarıda
+    // kalmış eski bir yayın, imagesUploaded checkpoint'i kaymasın diye eski sırayla sürer.
+    if (!pp.imagesUploaded) pp.previewInOrder = true;
+    let media = run.mediaUrls;
+    if (pp.previewInOrder && !media?.preview) media = await ensurePreview(runId, run);
+
+    // Sıra: kapak mockup'ı → eserin düz önizlemesi (Etsy: dijital üründe gerçek içeriğin önizlemesi
+    // şart) → diğer mockup'lar → ölçü görseli (en son). Etsy tavanı 10 görsel; aşan son mockup'lar düşer.
+    const allMockups = media?.mockups ?? [];
+    let ordered: { url: string; name: string }[] = [];
+    if (allMockups[effThumb]) ordered.push({ url: allMockups[effThumb], name: `mockup-${effThumb}.jpg` });
+    if (pp.previewInOrder && media?.preview) ordered.push({ url: media.preview, name: 'artwork-preview.jpg' });
     allMockups.forEach((u, i) => {
-      if (u && i !== effThumb) ordered.push(u);
+      if (u && i !== effThumb) ordered.push({ url: u, name: `mockup-${i}.jpg` });
     });
+    const room = MAX_LISTING_IMAGES - (media?.sizeGuide ? 1 : 0);
+    if (ordered.length > room) {
+      if (!pp.imagesUploaded) {
+        await addWarning(runId, `Etsy en fazla ${MAX_LISTING_IMAGES} görsel kabul ediyor — son ${ordered.length - room} mockup yüklenmedi.`);
+        const fresh = await getPipelineRun(runId);
+        pp.warnings = fresh?.publishProgress?.warnings ?? pp.warnings;
+      }
+      ordered = ordered.slice(0, room);
+    }
 
     // 3) Görseller — sıralı, her yüklemeden sonra checkpoint (imagesUploaded) → resume tam kaldığı yerden, çift upload yok.
     for (let i = pp.imagesUploaded ?? 0; i < ordered.length; i++) {
-      const buf = await readObject(keyFromUrl(ordered[i]));
-      await uploadListingImage(shopId, listingId, buf, `mockup-${i}.jpg`, 'image/jpeg', i + 1);
+      const buf = await readObject(keyFromUrl(ordered[i].url));
+      await uploadListingImage(shopId, listingId, buf, ordered[i].name, 'image/jpeg', i + 1);
       pp.imagesUploaded = i + 1;
       await updatePipelineRun(runId, { publishProgress: pp });
     }
 
     // 4) Ölçü görseli — görsellerden sonra, EN SON rank.
-    if (run.mediaUrls?.sizeGuide && !pp.sizeGuideDone) {
-      const buf = await readObject(keyFromUrl(run.mediaUrls.sizeGuide));
+    if (media?.sizeGuide && !pp.sizeGuideDone) {
+      const buf = await readObject(keyFromUrl(media.sizeGuide));
       await uploadListingImage(shopId, listingId, buf, 'size-guide.jpg', 'image/jpeg', ordered.length + 1);
       pp.sizeGuideDone = true;
       await updatePipelineRun(runId, { publishProgress: pp });
@@ -694,6 +729,34 @@ async function fail(runId: string, err: unknown): Promise<void> {
     errorStage: stage && stage !== 'error' ? stage : null,
     errorKind: classifyError(err),
   });
+}
+
+/** Etsy listing başına görsel tavanı. */
+const MAX_LISTING_IMAGES = 10;
+/** Düz eser önizlemesinin uzun kenarı — gerçek içeriği gösterir ama baskıya yetmez (2000 px ≈ 6.7" @300 PPI). */
+const PREVIEW_LONG_EDGE = 2000;
+
+/** Master'dan düz önizleme JPG'si (oran korunur, kırpma/mockup yok). */
+async function buildPreview(master: Buffer): Promise<Buffer> {
+  return sharp(master)
+    .resize(PREVIEW_LONG_EDGE, PREVIEW_LONG_EDGE, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 88 })
+    .toBuffer();
+}
+
+/**
+ * Önizleme yoksa üretir, depoya yazar ve güncel `mediaUrls`'i döner (idempotent).
+ * Bu kural gelmeden işlenmiş run'lar yayına geçerken burada tamamlanır; ücretli adım yoktur.
+ */
+async function ensurePreview(runId: string, run: PipelineRun): Promise<MediaUrls> {
+  const media: MediaUrls = run.mediaUrls ? { ...run.mediaUrls } : { mockups: [] };
+  if (media.preview) return media;
+  const src = run.upscaledImageUrl ?? run.generatedImageUrl;
+  if (!src) throw new Error('Önizleme için master görsel yok.');
+  const preview = await buildPreview(await readObject(keyFromUrl(src)));
+  media.preview = await putObject(`runs/${runId}/preview.jpg`, preview, 'image/jpeg');
+  await updatePipelineRun(runId, { mediaUrls: media });
+  return media;
 }
 
 /**

@@ -423,8 +423,8 @@ export default function GeneratePage() {
   const approveSeo = (seo: SeoData) => postStep('/api/pipeline/approve-seo', { seo });
   // Gate 3 → gate 2 (metin düzeltmesi); üretilmiş medya/dosyalar korunur.
   const backToSeo = () => postStep('/api/pipeline/back-to-seo', {});
-  const publish = (price: number, thumbnailIndex: number) =>
-    postStep('/api/pipeline/publish', { price, thumbnailIndex });
+  const publish = (price: number, thumbnailIndex: number, shopSectionId: number | null) =>
+    postStep('/api/pipeline/publish', { price, thumbnailIndex, shopSectionId });
   const pinPinterest = (copy: PinCopy, opts: PinRequestOptions) =>
     postStep('/api/pipeline/publish-pinterest', { ...copy, ...opts });
 

@@ -139,6 +139,7 @@ export async function createDraftListing(
   shopId: number,
   seo: SeoData,
   price: number,
+  shopSectionId?: number | null,
 ): Promise<number> {
   const taxonomyId = Number(seo.categoryId) || (await getDigitalPrintsTaxonomyId());
   // Güvenlik ağı: gate 2'de elle girilen ya da kural öncesi onaylanmış metin Etsy'nin 400'üne
@@ -155,6 +156,8 @@ export async function createDraftListing(
     tags: safe.tags.join(','),
     materials: safe.materials.join(','),
     state: 'draft',
+    // Mağaza bölümü (section) — gate 3'te seçilir; yoksa alan hiç gönderilmez (bölümsüz).
+    ...(shopSectionId ? { shop_section_id: shopSectionId } : {}),
   };
 
   try {
@@ -294,6 +297,28 @@ export async function uploadListingVideo(
 // alma kararı Etsy panelinden kullanıcıya aittir (bkz. lib/pipeline/run.ts, publishToEtsyInner
 // sonu). Buradaki `activateListing` hiçbir yerden çağrılmadığı için kaldırıldı — otomatik
 // yayına geçilecekse PATCH /shops/{id}/listings/{id} ile `state: 'active'` göndermek yeterli.
+
+// ── Mağaza bölümleri (section) ──────────────────────────────────────────────
+
+export interface ShopSection {
+  id: number;
+  title: string;
+  activeListingCount: number;
+}
+
+/**
+ * Mağazanın bölümlerini (section) döner — gate 3'te ilanın bölümü seçilir (`shop_section_id`).
+ * Yalnız OKUR: bölüm oluşturma/düzenleme `shops_w` izni ister ve bu uygulama istemez —
+ * bölümler Etsy panelinden açılır.
+ */
+export async function getShopSections(shopId: number): Promise<ShopSection[]> {
+  const r = await etsyFetch<{
+    results?: { shop_section_id: number; title: string; rank?: number; active_listing_count?: number }[];
+  }>(`/shops/${shopId}/sections`);
+  return (r.results ?? [])
+    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+    .map((s) => ({ id: s.shop_section_id, title: s.title, activeListingCount: s.active_listing_count ?? 0 }));
+}
 
 // ── Kendi ilanımızın durumu (SALT OKUNUR) ────────────────────────────────────
 

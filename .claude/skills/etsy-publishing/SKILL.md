@@ -6,6 +6,7 @@ description: Etsy Open API v3 ile çalışırken kullan — listing oluşturma/y
 # Etsy yayını
 
 Kod: `src/lib/etsy/{client,oauth,listings}.ts` · Orkestrasyon: `publishToEtsy` (`pipeline/run.ts`)
+· API'nin tüm kapsamı (uçlar, izinler, olmayanlar): **`DOCS/etsy-api.md`**
 · Komşular: `image-pipeline` (medya) · `seo-content` (metin) · `pinterest-publishing` (pin).
 
 ## OAuth ve token
@@ -52,10 +53,15 @@ Kod: `src/lib/etsy/{client,oauth,listings}.ts` · Orkestrasyon: `publishToEtsy` 
 ## Yayın sırası — bu sıra bozulmaz
 
 1. `createDraftListing` (`listings.ts`) → `state: 'draft'` listing; title/tags/materials önce
-   `toEtsySafe` (`text-rules.ts`) — Etsy 400 `all_caps` / `invalid_characters` önlemi
+   `toEtsySafe` (`text-rules.ts`) — Etsy 400 `all_caps` / `invalid_characters` önlemi.
+   `shop_section_id` gate 3'te seçilen bölümdür (`getShopSections`, `api/etsy/sections`; son seçim
+   ürün tipine göre `app_settings.etsy_section_{print,tv}`'de). Yalnız OLUŞTURMADA gönderilir —
+   taslak oluştuktan sonra bölüm değişikliği için PATCH yapılmaz. Bölüm açmak `shops_w` ister; istenmez.
 2. `setListingAttributes` → öznitelikler
-3. `uploadListingImage` → mockup'lar: seçilen thumbnail **rank 1'e** alınır, kalanlar sırayla
-   (ham sanat görseli display olarak YÜKLENMEZ). Etsy tavanı: 10 görsel.
+3. `uploadListingImage` → seçilen thumbnail mockup **rank 1**, eserin **düz önizlemesi rank 2**
+   (`mediaUrls.preview`, uzun kenar 2000 px — Etsy: görsel içerikli dijital üründe "alıcının alacağı
+   gerçek içeriğin önizlemesi" şart), sonra kalan mockup'lar. Etsy tavanı 10 görsel; aşarsa son
+   mockup'lar düşer (uyarı yazılır). Eski, yarıda kalmış yayınlar `previewInOrder` olmadan eski sırayla sürer.
 4. `uploadListingImage` → ölçü görseli, **en son rank** — yalnızca `usesSizeGuide` olan ürün
    tipinde (print var, tv yok).
 5. `uploadListingVideo` → zoom mp4 (1 video sınırı). **Best-effort**: başarısız olursa yayın devam

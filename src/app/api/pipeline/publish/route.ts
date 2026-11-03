@@ -1,15 +1,17 @@
 /**
  * POST /api/pipeline/publish
- * Body: { id: string, price?: number }
+ * Body: { id: string, price?: number, thumbnailIndex?: number, shopSectionId?: number | null }
  * Kapı 3 onayı — Etsy yayınını ARKA PLANDA başlatır (taslak listing + görsel + dosyalar; aktive EDİLMEZ).
+ * `shopSectionId` ilanın Etsy mağaza bölümüdür (null = bölümsüz); ürün tipinin sonraki varsayılanı
+ * olarak da hatırlanır.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { getPipelineRun } from '@/lib/db/queries';
+import { getPipelineRun, setSetting } from '@/lib/db/queries';
 import { publishToEtsy } from '@/lib/pipeline/run';
 
 export async function POST(req: NextRequest) {
-  let body: { id?: string; price?: number; thumbnailIndex?: number };
+  let body: { id?: string; price?: number; thumbnailIndex?: number; shopSectionId?: number | null };
   try {
     body = await req.json();
   } catch {
@@ -28,6 +30,20 @@ export async function POST(req: NextRequest) {
   // Geçersiz/eksik fiyat → undefined: publishToEtsy checkpoint'e, o da ürün tipinin varsayılanına düşer.
   const price = typeof body.price === 'number' && body.price > 0 ? body.price : undefined;
   const thumbnailIndex = typeof body.thumbnailIndex === 'number' ? body.thumbnailIndex : 0;
-  void publishToEtsy(id, price, thumbnailIndex);
+  // undefined = alan gelmedi (checkpoint'teki değer korunur); null = bilinçli "bölümsüz".
+  const shopSectionId =
+    body.shopSectionId === null
+      ? null
+      : Number.isInteger(body.shopSectionId) && body.shopSectionId! > 0
+        ? body.shopSectionId!
+        : undefined;
+  if (shopSectionId !== undefined) {
+    await setSetting(
+      run.productType === 'tv' ? 'etsy_section_tv' : 'etsy_section_print',
+      shopSectionId === null ? 'none' : String(shopSectionId),
+    );
+  }
+
+  void publishToEtsy(id, price, thumbnailIndex, shopSectionId);
   return NextResponse.json({ ok: true, status: 'publishing_etsy' }, { status: 202 });
 }

@@ -208,7 +208,10 @@ export type AppSettingKey =
   // Refresh token sağlayıcı tarafından reddedildi (invalid_grant) → yeniden yetkilendirme şart.
   // Doluyken çağrılar sağlayıcıya tekrar tekrar gitmez; OAuth callback'i temizler. Değer: ISO zaman.
   | 'etsy_reauth_required'
-  | 'pinterest_reauth_required';
+  | 'pinterest_reauth_required'
+  // Ürün tipine göre son seçilen Etsy mağaza bölümü (shop_section_id; 'none' = bölümsüz).
+  | 'etsy_section_print'
+  | 'etsy_section_tv';
 
 export async function getSetting(key: AppSettingKey): Promise<string | null> {
   const [row] = await db

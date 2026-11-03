@@ -48,6 +48,14 @@ export function DoneView({
             yayına alman gerekiyor. Pinterest pini yalnız ilan Etsy&apos;de aktif okunduğunda atılır.
           </p>
         )}
+        {/* Etsy API'sinde üretim yöntemi / AI alanı YOK (OpenAPI şeması, 2026-11) — yalnız arayüzden seçilir.
+            Açıklamadaki AI beyanı hat tarafından zaten zorunlu tutuluyor (text-rules.validateListingSeo). */}
+        {active ? null : (
+          <p className="mt-2 text-sm text-state-turn-ink">
+            Yayına almadan önce Etsy&apos;de üretim yöntemi olarak <strong>With an AI generator</strong>{' '}
+            seç — bu alan API&apos;den ayarlanamıyor. Açıklamadaki AI beyanı ilana zaten eklendi.
+          </p>
+        )}
         <button
           type="button"
           onClick={onCheckEtsyState}
