@@ -37,6 +37,7 @@ import {
   previewAspectClass,
   readJson,
   type CompetitorAnalysis,
+  type ThemePromptsResult,
 } from './_components/shared';
 import { Stepper } from './_components/GateRail';
 import { WorkingPanel } from './_components/WorkingPanel';
@@ -56,8 +57,14 @@ export default function GeneratePage() {
   // Referans rakip ilandan otomatik mı yüklendi (etiket + rakip temizlenince birlikte temizlenir).
   const [referenceFromCompetitor, setReferenceFromCompetitor] = useState(false);
   const [referenceNotice, setReferenceNotice] = useState<string | null>(null);
-  const [note, setNote] = useState(''); // Instruction Üretici: opsiyonel ek not
-  const [instructing, setInstructing] = useState(false); // talimat üretiliyor
+  const [note, setNote] = useState(''); // Prompt üretici: opsiyonel tema isteği
+  const [instructing, setInstructing] = useState(false); // prompt üretiliyor
+  // Referanstan üretilen promptlar: referans tarifi + 2 tema (kart olarak gösterilir).
+  const [themePrompts, setThemePrompts] = useState<ThemePromptsResult | null>(null);
+  // Referans ÜRETİME gönderilsin mi (image-to-image)? Varsayılan KAPALI: referans yalnız prompt yazmak
+  // için kullanılır, görsel metinden üretilir (kopya riski en düşük; kullanıcı kararı).
+  const [includeReference, setIncludeReference] = useState(false);
+  const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const [research, setResearch] = useState<CompetitorAnalysis | null>(null); // bağlı rakip analizi
   const [run, setRun] = useState<PipelineRun | null>(null);
   const [busy, setBusy] = useState(false);
@@ -288,10 +295,7 @@ export default function GeneratePage() {
     setError(null);
     setPollWarning(null);
     setPrompt('');
-    setReferenceFile(null);
-    setReferencePreview(null);
-    setReferenceFromCompetitor(false);
-    setReferenceNotice(null);
+    removeReference();
     setNote('');
     setResearch(null);
     setSavedVariations(new Set());
@@ -368,21 +372,34 @@ export default function GeneratePage() {
     }
   }
 
+  /**
+   * Referansı TAMAMEN kaldırır (elle seçilmiş ya da rakipten yüklenmiş). Native file input'un
+   * değeri de sıfırlanır — yoksa aynı dosya yeniden seçildiğinde change olayı tetiklenmiyordu.
+   */
+  function removeReference() {
+    if (referencePreview?.startsWith('blob:')) URL.revokeObjectURL(referencePreview);
+    setReferenceFile(null);
+    setReferencePreview(null);
+    setReferenceFromCompetitor(false);
+    setReferenceNotice(null);
+    setThemePrompts(null);
+    setIncludeReference(false);
+    if (referenceInputRef.current) referenceInputRef.current.value = '';
+  }
+
   function clearCompetitor() {
     setResearch(null);
     setReferenceNotice(null);
     // Yalnız otomatik yüklenen referans temizlenir; elle seçilen dosyaya dokunulmaz.
-    if (referenceFromCompetitor) {
-      setReferenceFile(null);
-      setReferencePreview(null);
-      setReferenceFromCompetitor(false);
-    }
+    if (referenceFromCompetitor) removeReference();
   }
 
   function onReferenceChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
+    if (referencePreview?.startsWith('blob:')) URL.revokeObjectURL(referencePreview);
     setReferenceFromCompetitor(false);
     setReferenceNotice(null);
+    setThemePrompts(null);
     setReferenceFile(file);
     if (!file) {
       setReferencePreview(null);
@@ -393,8 +410,9 @@ export default function GeneratePage() {
     reader.readAsDataURL(file);
   }
 
-  // Instruction Üretici — referans görsel + opsiyonel nottan İngilizce transformation instruction
-  // üretip Prompt kutusuna yazar. Kullanıcı düzenleyip "varyasyon üret" ile onaylar.
+  // Prompt üretici — referans görselden (1) tek başına kullanılabilir sahne tarifi ve (2) ondan
+  // uzaklaşmayan 2 temalı prompt üretir. Kullanıcı birini "Bu promptu kullan" ile Prompt kutusuna
+  // alır, düzenleyip "varyasyon üret" ile onaylar (görsel üretmez — yalnız Claude çağrısı).
   async function generateInstruction() {
     if (!referenceFile) return;
     setInstructing(true);
@@ -404,13 +422,15 @@ export default function GeneratePage() {
       const res = await apiFetch('/api/instruction/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenceImage, note: note.trim() || undefined }),
+        body: JSON.stringify({ referenceImage, note: note.trim() || undefined, productType }),
       });
-      const data = await readJson<{ instruction?: string; error?: string }>(res);
-      if (!res.ok || !data.instruction) throw new Error(data.error ?? 'Talimat üretilemedi.');
-      setPrompt(data.instruction);
+      const data = await readJson<Partial<ThemePromptsResult> & { error?: string }>(res);
+      if (!res.ok || !data.referencePrompt || !data.variants?.length) {
+        throw new Error(data.error ?? 'Prompt üretilemedi.');
+      }
+      setThemePrompts({ referencePrompt: data.referencePrompt, variants: data.variants });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Talimat üretilemedi.');
+      setError(e instanceof Error ? e.message : 'Prompt üretilemedi.');
     } finally {
       setInstructing(false);
     }
@@ -421,7 +441,8 @@ export default function GeneratePage() {
     setBusy(true);
     setError(null);
     try {
-      const referenceImage = referenceFile ? await fileToBase64(referenceFile) : undefined;
+      // Referans yalnız kullanıcı "üretime dahil et" dediyse gönderilir (image-to-image); yoksa metinden üretilir.
+      const referenceImage = referenceFile && includeReference ? await fileToBase64(referenceFile) : undefined;
       const res = await apiFetch('/api/pipeline/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -655,7 +676,7 @@ export default function GeneratePage() {
               label="Model"
               htmlFor="gen-model"
               hint={
-                model === 'imagen' && referenceFile ? (
+                model === 'imagen' && referenceFile && includeReference ? (
                   <span className="text-gold-deep">
                     Imagen 4 görsel girdisi kabul etmiyor — referanslı üretim FLUX.1 Kontext ile yapılacak.
                   </span>
@@ -686,9 +707,10 @@ export default function GeneratePage() {
             label="Referans görsel"
             htmlFor="gen-reference"
             optional
-            hint="Model görseli gerçekten görür (image-to-image). Birebir kopya çıkmaması için Prompt bir değişim talimatı olmalı."
+            hint="Referanstan sahne tarifi ve 2 tema promptu üretilir. Görselin üretime gönderilip gönderilmeyeceğini aşağıdan seçersin."
           >
             <input
+              ref={referenceInputRef}
               id="gen-reference"
               type="file"
               accept="image/*"
@@ -696,44 +718,43 @@ export default function GeneratePage() {
               className="block w-full cursor-pointer text-sm text-ink-muted file:mr-4 file:cursor-pointer file:rounded-full file:border file:border-solid file:border-field file:bg-sheet file:px-4 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:border-ink hover:file:bg-shade"
             />
             {referencePreview ? (
-              <Framed mat="sm" ratio="aspect-square" className="mt-3 w-24">
-                <Image
-                  src={referencePreview}
-                  alt="Referans önizleme"
-                  width={96}
-                  height={96}
-                  unoptimized
-                  className={FRAMED_IMG}
-                />
-              </Framed>
+              <div className="mt-3 flex items-end gap-3">
+                <Framed mat="sm" ratio="aspect-square" className="w-24">
+                  <Image
+                    src={referencePreview}
+                    alt="Referans önizleme"
+                    width={96}
+                    height={96}
+                    unoptimized
+                    className={FRAMED_IMG}
+                  />
+                </Framed>
+                <Button variant="ghost" size="sm" onClick={removeReference}>
+                  Referansı kaldır
+                </Button>
+              </div>
             ) : null}
             {referenceFromCompetitor && research ? (
               <p className="mt-2 text-sm text-ink-muted">
-                Rakip ilanın (#{research.source.listingId}) kapak görselinden otomatik yüklendi.{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReferenceFile(null);
-                    setReferencePreview(null);
-                    setReferenceFromCompetitor(false);
-                  }}
-                  className="font-medium underline"
-                >
-                  Kaldır
-                </button>
+                Rakip ilanın (#{research.source.listingId}) kapak görselinden otomatik yüklendi.
               </p>
             ) : null}
             {referenceNotice ? <p className="mt-2 text-sm text-state-turn-ink">{referenceNotice}</p> : null}
 
             {referenceFile ? (
               <div className="mt-4 space-y-3 rounded-lg border border-sand bg-shade p-4">
-                <Field label="Ek not" htmlFor="gen-note" optional hint="Türkçe veya İngilizce yazabilirsin.">
+                <Field
+                  label="Tema isteği"
+                  htmlFor="gen-note"
+                  optional
+                  hint="İki yeni temaya yansıtılır. Türkçe veya İngilizce yazabilirsin."
+                >
                   <Textarea
                     id="gen-note"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     rows={2}
-                    placeholder="Örn. evi farklı bir ev gibi tasarla, kahverengi arabayı lacivert yap"
+                    placeholder="Örn. gün batımı ve sıcak tonlar / kış gecesi, ay ışığı"
                   />
                 </Field>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -743,12 +764,57 @@ export default function GeneratePage() {
                     disabled={instructing || !referenceFile}
                   >
                     {instructing ? <Spinner /> : null}
-                    {instructing ? 'Talimat üretiliyor…' : 'Talimat üret'}
+                    {instructing ? 'Promptlar yazılıyor… (~30 sn)' : themePrompts ? 'Yeniden üret' : 'Prompt üret'}
                   </Button>
                   <p className="text-xs text-ink-muted">
-                    Talimat yukarıdaki Prompt kutusuna yazılır; düzenleyip üretebilirsin.
+                    Referansın sahne tarifi + 2 yeni tema. Seçtiğini Prompt kutusuna alıp düzenleyebilirsin.
                   </p>
                 </div>
+
+                {themePrompts ? (
+                  <div className="space-y-3">
+                    {[
+                      { label: 'Referans tarifi', prompt: themePrompts.referencePrompt },
+                      ...themePrompts.variants.map((v, i) => ({ label: `Tema ${i + 1} — ${v.theme}`, prompt: v.prompt })),
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-md border border-sand bg-sheet p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-ink">{item.label}</p>
+                          <Button
+                            size="sm"
+                            variant={prompt === item.prompt ? 'primary' : 'ghost'}
+                            onClick={() => setPrompt(item.prompt)}
+                          >
+                            {prompt === item.prompt ? '✓ Prompt kutusunda' : 'Bu promptu kullan'}
+                          </Button>
+                        </div>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-sm text-ink-body">
+                            {item.prompt.slice(0, 160)}
+                            {item.prompt.length > 160 ? '… (devamı)' : ''}
+                          </summary>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-ink-body">{item.prompt}</p>
+                        </details>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <label className="flex items-start gap-2 border-t border-sand pt-3 text-sm text-ink-body">
+                  <input
+                    type="checkbox"
+                    checked={includeReference}
+                    onChange={(e) => setIncludeReference(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <strong>Referansı üretime dahil et</strong> (image-to-image, FLUX Kontext).{' '}
+                    <span className="text-ink-muted">
+                      Kapalıyken görsel yalnız prompttan üretilir — yeni tema daha belirgin, kopya riski en düşük.
+                      Açıkken sonuç referansa çok yakın kalır; başkasının eserinde kopya riski taşır.
+                    </span>
+                  </span>
+                </label>
               </div>
             ) : null}
           </Field>
@@ -760,7 +826,8 @@ export default function GeneratePage() {
             </Button>
             <p className="mt-2 text-xs text-ink-muted">
               Tahmini maliyet ≈ {formatUsd(variations * FAL_PRICES.kontextPerImage)} (
-              {model === 'flux' || referenceFile ? 'fal FLUX' : 'Google Imagen'}, görsel başına ~$0.04, liste fiyatı).
+              {model === 'flux' || (referenceFile && includeReference) ? 'fal FLUX' : 'Google Imagen'}, görsel başına
+              ~$0.04, liste fiyatı).
             </p>
             {!prompt.trim() ? (
               <p className="mt-2 text-xs text-ink-muted">Başlamak için önce bir prompt yaz.</p>

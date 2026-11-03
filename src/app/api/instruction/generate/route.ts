@@ -1,20 +1,23 @@
 /**
  * POST /api/instruction/generate
- * Body: { referenceImage: { base64, mediaType }, note?: string }
+ * Body: { referenceImage: { base64, mediaType }, note?: string, productType?: 'print' | 'tv' }
  *
- * Referans görseli Claude Vision'a verir, görsellere gönderilecek İngilizce transformation
- * instruction'ı üretir (kullanıcının opsiyonel notu talimata entegre edilir). SENKRON döner:
- * { instruction }. Frontend bu metni Prompt kutusuna yazar; kullanıcı düzenleyip üretimi başlatır.
+ * Referans görseli Claude Vision'a verir; görselin tek başına kullanılabilir sahne promptunu
+ * (referencePrompt) ve ondan uzaklaşmayan 2 temalı varyantı üretir. SENKRON döner:
+ * { referencePrompt, variants: [{ theme, prompt }] }. Panel bunları kart olarak gösterir;
+ * kullanıcı seçtiğini Prompt kutusuna alır, düzenleyip üretimi başlatır (görsel üretmez).
+ * Upstream (Claude) hatası → 424 (502/504 DEĞİL — CLAUDE.md kural 4).
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { generateTransformationInstruction } from '@/lib/claude/vision';
+import { generateThemePrompts } from '@/lib/claude/vision';
 import { MAX_UPLOAD_BYTES, bodyErrorStatus, decodeBase64Limited, readJsonBody } from '@/lib/http/body';
 
 const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const UPSTREAM_FAILED = 424;
 
 export async function POST(req: NextRequest) {
-  let body: { referenceImage?: { base64?: string; mediaType?: string }; note?: string };
+  let body: { referenceImage?: { base64?: string; mediaType?: string }; note?: string; productType?: string };
   try {
     body = await readJsonBody(req);
   } catch (e) {
@@ -39,14 +42,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const instruction = await generateTransformationInstruction(
+    const result = await generateThemePrompts(
       base64,
       mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-      body.note,
+      { note: body.note, productType: body.productType === 'tv' ? 'tv' : 'print' },
     );
-    return NextResponse.json({ instruction });
+    return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Talimat üretilemedi.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Prompt üretilemedi.';
+    return NextResponse.json({ error: message }, { status: UPSTREAM_FAILED });
   }
 }

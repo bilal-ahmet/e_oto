@@ -152,3 +152,22 @@ Gerçek fatura: `npm run fal:usage` (fal kullanım API'si, `FAL_BILLING_KEY` ger
 - Real-ESRGAN (~1–2 sent/upscale, kalite testi gerekir).
 - Mockup sayısını azaltmak.
 - Claude'u `claude-opus-5-5`'e geçirmek (run başına birkaç sent).
+
+---
+
+## 8. Referanstan tema promptu (2026-11-03)
+
+Eski "talimat üretici", görseli zaten gören bir düzenleme modeli için kısa edit komutları
+yazıyordu (Sonnet, düşünme kapalı); kullanıcı istediği sonuca ulaşamıyordu. Kullanıcının
+Claude sohbetinde iyi sonuç aldığı akış koda alındı:
+
+1. Referansın tek başına kullanılabilir sahne tarifi.
+2. Aynı sahneden uzaklaşmayan 2 tema.
+
+Model `claude-opus-5-5`, effort high, sunucu tarafı ret yedeği `claude-opus-4-8`. Bir çağrı ~25–30 sn sürer ve
+yaklaşık birkaç sent tutar.
+
+Referansın üretime gönderilmesi (image-to-image) artık kutuyla seçilir ve varsayılanı kapalıdır.
+Gerekçe: tam sahne tarifi metinden üretimde en iyi sonucu verir. Ayrıca i2i, referansa (özellikle
+rakipten otomatik yüklenen görsele) çok yakın kalıp kopya riski taşır. Ayrıntı:
+`.claude/skills/image-pipeline/variations-and-drafts.md`.

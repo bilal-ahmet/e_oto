@@ -14,6 +14,12 @@ export const STAGES = [
   { key: 'publish', label: 'Yayın' },
 ] as const;
 
+// /api/instruction/generate yanıtı — referans tarifi + 2 temalı prompt (lib/claude/vision).
+export interface ThemePromptsResult {
+  referencePrompt: string;
+  variants: { theme: string; prompt: string }[];
+}
+
 // /api/competitor-research/analyze yanıtı
 export interface CompetitorAnalysis {
   id: number;
