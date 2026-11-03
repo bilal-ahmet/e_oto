@@ -27,6 +27,8 @@ import {
   buttonClasses,
 } from '@/components/ui';
 import { apiFetch } from '@/lib/client/api';
+import { ERROR_KIND_META, STATUS_META } from '@/lib/status';
+import { formatTr } from '@/lib/format';
 import {
   PRODUCT_OPTIONS,
   WORKING,
@@ -40,6 +42,7 @@ import { WorkingPanel } from './_components/WorkingPanel';
 import { SeoEditor } from './_components/SeoEditor';
 import { PublishReview } from './_components/PublishReview';
 import { DoneView } from './_components/DoneView';
+import type { PinRequestOptions } from './_components/PinterestPanel';
 import { CompetitorResearchPanel } from './_components/CompetitorStrip';
 
 export default function GeneratePage() {
@@ -418,9 +421,36 @@ export default function GeneratePage() {
 
   const selectImage = (index: number) => postStep('/api/pipeline/select-image', { index });
   const approveSeo = (seo: SeoData) => postStep('/api/pipeline/approve-seo', { seo });
+  // Gate 3 → gate 2 (metin düzeltmesi); üretilmiş medya/dosyalar korunur.
+  const backToSeo = () => postStep('/api/pipeline/back-to-seo', {});
   const publish = (price: number, thumbnailIndex: number) =>
     postStep('/api/pipeline/publish', { price, thumbnailIndex });
-  const pinPinterest = (copy: PinCopy) => postStep('/api/pipeline/publish-pinterest', { ...copy });
+  const pinPinterest = (copy: PinCopy, opts: PinRequestOptions) =>
+    postStep('/api/pipeline/publish-pinterest', { ...copy, ...opts });
+
+  // Etsy'deki gerçek ilan durumunu SALT OKUNUR okutur ve run'ı tazeler (polling tek tur).
+  const [checkingState, setCheckingState] = useState(false);
+  async function checkEtsyState() {
+    if (!run) return;
+    setCheckingState(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/api/pipeline/etsy-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: run.id }),
+      });
+      if (!res.ok) {
+        const data = await readJson<{ error?: string }>(res);
+        throw new Error(data.error ?? 'Etsy durumu okunamadı.');
+      }
+      poll(run.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Etsy durumu okunamadı.');
+    } finally {
+      setCheckingState(false);
+    }
+  }
 
   // Tek mockup yeniden üretimi — status awaiting_publish'te kalır; SADECE ilgili küçük resmi
   // spinner'a alıp o mockup URL'i değişene kadar polling eder (global ekran değişmez).
@@ -827,12 +857,20 @@ export default function GeneratePage() {
           onPublish={publish}
           onRegenerate={regenerateMockup}
           onReject={reject}
+          onBackToSeo={backToSeo}
         />
       ) : null}
 
       {/* Tamamlandı */}
       {status === 'done' && run ? (
-        <DoneView run={run} onReset={reset} onPinPinterest={pinPinterest} pinning={busy} />
+        <DoneView
+          run={run}
+          onReset={reset}
+          onPinPinterest={pinPinterest}
+          pinning={busy}
+          onCheckEtsyState={() => void checkEtsyState()}
+          checkingState={checkingState}
+        />
       ) : null}
 
       {/* Hata */}
@@ -843,6 +881,18 @@ export default function GeneratePage() {
             <h2 className="text-lg font-semibold">Hata</h2>
           </div>
           <p className="mt-3 text-sm text-ink-body">{run.errorMessage}</p>
+          {run.errorKind || run.errorStage ? (
+            <p className="mt-2 text-sm text-ink-muted">
+              {[
+                run.errorKind ? ERROR_KIND_META[run.errorKind].label : null,
+                run.errorStage ? `aşama: ${STATUS_META[run.errorStage]?.label ?? run.errorStage}` : null,
+                formatTr(run.updatedAt),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              {run.errorKind ? <span className="mt-1 block font-medium">{ERROR_KIND_META[run.errorKind].hint}</span> : null}
+            </p>
+          ) : null}
           {canResume ? (
             <p className="mt-2 text-sm text-ink-muted">
               Üretilmiş çıktılar (görsel, SEO, mockup, dosyalar) duruyor. Hatanın sebebini

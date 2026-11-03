@@ -5,6 +5,7 @@
  */
 
 import { etsyFetch, etsyPublicFetch } from './client';
+import { ApiError } from '@/lib/errors';
 import { toEtsySafe } from './text-rules';
 import type { ListingAttributes, SeoData } from '@/types';
 
@@ -177,15 +178,18 @@ export async function createDraftListing(
 
 /**
  * Listing özniteliklerini (Orientation, Style, Occasion, Room, Subject) taksonomi izinli
- * değerlerine eşleyip yazar. Eşleşmeyen/desteklenmeyen property'ler sessizce atlanır.
+ * değerlerine eşleyip yazar. Eşleşmeyen property'ler atlanır; YAZILAMAYANLAR (Etsy hatası)
+ * yayını düşürmez ama döndürülür — çağıran run uyarısına yazar (eskiden sessizce yutuluyordu).
+ * @returns yazılamayan property'ler için kısa sebep listesi
  */
 export async function setListingAttributes(
   shopId: number,
   listingId: number,
   taxonomyId: number,
   attributes: ListingAttributes,
-): Promise<void> {
+): Promise<string[]> {
   const props = await getPropertiesByTaxonomyId(taxonomyId);
+  const failures: string[] = [];
 
   // Hedef → property adı anahtar kelimesi. Değerler virgülle ayrılmış olabilir (çoklu seçim).
   const targets: { keyword: string; value: string }[] = [
@@ -223,10 +227,13 @@ export async function setListingAttributes(
         method: 'PUT',
         json: { value_ids: chosen.map((v) => v.value_id), values: chosen.map((v) => v.name) },
       });
-    } catch {
+    } catch (e) {
       // Tek bir property hatası diğerlerini engellemesin (scale_id vb. gereksinimler).
+      const why = e instanceof ApiError ? `Etsy ${e.status}` : e instanceof Error ? e.message : String(e);
+      failures.push(`${prop.name} (${chosen.map((v) => v.name).join(', ')}): ${why}`);
     }
   }
+  return failures;
 }
 
 /**
@@ -287,6 +294,35 @@ export async function uploadListingVideo(
 // alma kararı Etsy panelinden kullanıcıya aittir (bkz. lib/pipeline/run.ts, publishToEtsyInner
 // sonu). Buradaki `activateListing` hiçbir yerden çağrılmadığı için kaldırıldı — otomatik
 // yayına geçilecekse PATCH /shops/{id}/listings/{id} ile `state: 'active'` göndermek yeterli.
+
+// ── Kendi ilanımızın durumu (SALT OKUNUR) ────────────────────────────────────
+
+export interface OwnListingState {
+  state: string; // Etsy değeri: active | draft | inactive | sold_out | expired | edit … ; bulunamadıysa 'not_found'
+  shopId: number | null;
+  title?: string;
+  url?: string;
+}
+
+/**
+ * Etsy'deki ilanın GERÇEK durumunu okur — `done` run'ının "aktif" sayılması ve Pinterest pin
+ * ön koşulu buna dayanır. KİMLİKLİ (`etsyFetch`, `listings_r`) çağrılır: public uç yalnız aktif
+ * ilanları gösterir, taslağı göremez. Yalnız okur; ilana hiçbir şey yazmaz.
+ *
+ * 404 → `not_found` (silinmiş ya da bu yetkiyle görünmüyor). Çağıran bunu "aktif değil" sayar
+ * (fail-closed). Diğer hatalar fırlatılır; çağıran `unknown` yazar.
+ */
+export async function getOwnListingState(listingId: number): Promise<OwnListingState> {
+  try {
+    const r = await etsyFetch<{ state?: string; shop_id?: number; title?: string; url?: string }>(
+      `/listings/${listingId}`,
+    );
+    return { state: r.state ?? 'unknown', shopId: r.shop_id ?? null, title: r.title, url: r.url };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return { state: 'not_found', shopId: null };
+    throw e;
+  }
+}
 
 // ── Rakip tarama (CLAUDE.md §9) ─────────────────────────────────────────────
 

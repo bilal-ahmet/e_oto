@@ -90,3 +90,33 @@ konusu olmadığını gösterir.
 
 Deploy sonucu: `instance_size_slug: basic-s` (2 GB). **1 GB yetmiyor.**
 `instance_count: 1` — cron ve fire-and-forget adımlar tek süreç varsayıyor.
+
+---
+
+## 6. Güvenilirlik ve ölçülebilirlik turu (Velora notu, 2026-11)
+
+Kaynak: mağaza sahibinin 31 Eki 2026 tarihli iyileştirme notu (panel gözlemlerine dayalı).
+Kod incelemesinde zaten var olanlar: iki tarihsel Etsy 400'ü (`all_caps`, `materials
+invalid_characters`) 15 Eki'de `text-rules.ts` ile giderilmişti; hat **mevcut ilanları
+güncellemez** (yalnız kendi açtığı taslağa yazar), ilanı aktif yapmaz; 400'ler otomatik tekrar
+denenmez. Bu turda alınan kararlar:
+
+| Karar | Gerekçe | Nerede |
+|---|---|---|
+| Kullanıcı reddi = `rejected` durumu (teknik hata değil). Eski kayıtlar (`error` + red mesajı) DB'de **değiştirilmeden** gösterimde/sayaçta `rejected` sayılır | 65 "hata"nın 63'ü red idi; sistem sağlığı yanlış okunuyordu. Geçmişi yeniden yazmamak istendi | `lib/status.ts` `displayStatus`, `queries.pipelineRunStatusCounts` |
+| Etsy listing'i olan run reddedilemez | Red, Etsy'deki taslağı panelden görünmez kılıyordu | `api/pipeline/reject` |
+| Teknik hata = mesaj + `error_stage` + `error_kind` (validation/auth/rate_limit/transient/internal) | "Ne yapmalıyım" sorusu cevapsızdı; 400 ile zaman aşımı ayırt edilemiyordu | `lib/errors.ts`, `run.ts fail()` |
+| "Aktif ilan" sayısı `done`'a değil, Etsy'den **salt okunur** geri okunan duruma dayanır; okunamayan "doğrulanmadı" sayılır | `done` = taslak aktarıldı; panel sayısı canlı envanter sanılıyordu | `lib/pipeline/listing-state.ts`, `api/pipeline/etsy-state` |
+| Gönderim öncesi alan doğrulaması: düzeltilebilen sessizce düzeltilir (`toEtsySafe`), düzeltilemeyen (uzunluk, adet, fiziksel materyal, AI beyanı) gate 2'de onayı ve yayını **engeller** | Etsy 400'ü ücretli üretimden sonra geliyordu; aynı içerikle tekrar işe yaramaz | `text-rules.validateListingSeo` |
+| Materyaller 13 kalır ama hepsi teslim edilen dijital ürünü tanımlar; boşluk ürün tipinin doğru terim havuzundan doldurulur | Fiziksel kâğıt/tuval/PDF etiketleri teslim edilmeyen şeyi vaat ediyordu | `product/config.materialPool`, `claude/seo.ts` |
+| Açıklamada AI beyanı zorunlu (iki şablonda da) | Mağaza sahibi tüm ürünlerin AI ile üretildiğini doğruladı; Etsy politikası. Etsy'nin "With an AI generator" üretim yöntemi alanı **API şemasında bulunamadı** (createDraftListing OAS, 2026-11) — API'den ayarlanmıyor, Etsy panelinden elle seçilir | `listing/description.ts` |
+| Paketlenen her dosya piksel/oran (addan değil pikselden), 20 MB ve SHA-256 tekilliği açısından doğrulanır; adet spec ile birebir | Mağazada "5x7" adlı ama 4:5 içerikli (aynı hash) dosya bulundu | `packaging/validate.ts` |
+| Pin yalnız Etsy'de **aktif** okunan ilana atılır (fail-closed); `POST /pins` öncesi `pin_attempted_at` yazılır, sonuç belirsizse panoda mutabakat yapılır, kör tekrar yok | Taslak ilana pin = ölü link; Pinterest idempotency'si varsayılmaz | `run.publishToPinterest`, `pinterest/pins.findPinForListing` |
+| Bağlantı durumu = son salt okunur API kontrolü (TSİ zamanıyla); refresh `invalid_grant` → `*_reauth_required` bayrağı, tekrar denenmez | Panelde görünen "geçerlilik" 1 saatlik erişim anahtarıydı (arıza değil); "bağlı" tek başına kanıt değildi | `lib/connection/health.ts` |
+
+**P2 olarak bırakılanlar (uygulanmadı):** 429 `Retry-After` ile sınırlı tekrar; `createDraftListing`
+zaman aşımında çift taslak mutabakatı (checkpoint + `GET /shops/{id}/listings?state=draft`);
+varyasyon sayısı/model/maliyet kaydı (gerçek maliyet API'den alınamıyorsa tahmin yazılmaz).
+
+İzleme: `npm run etsy:snapshot -- <id…>` salt okunur anlık görüntü alır (`snapshots/`, gitignore);
+iki görüntü `diff` ile karşılaştırılır. Çevrimdışı kural kontrolü: `npm run check:rules`.

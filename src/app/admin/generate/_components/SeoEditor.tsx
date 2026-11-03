@@ -5,7 +5,17 @@ import Image from 'next/image';
 import type { ProductType, SeoData } from '@/types';
 import { Button, Card, Chevron, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner, Textarea } from '@/components/ui';
 import { previewAspectClass } from './shared';
-import { MAX_CAPS_WORDS, countCapsWords, hasInvalidMaterialChars } from '@/lib/etsy/text-rules';
+import {
+  AI_DISCLOSURE_TEXT,
+  MAX_CAPS_WORDS,
+  hasAiDisclosure,
+  countCapsWords,
+  hasInvalidMaterialChars,
+  isPhysicalMaterial,
+  toEtsySafe,
+  validateListingSeo,
+  type SeoField,
+} from '@/lib/etsy/text-rules';
 
 export function SeoEditor({
   initial,
@@ -39,6 +49,11 @@ export function SeoEditor({
   const capsWords = countCapsWords(seo.title);
   const badMaterials = seo.materials.filter(hasInvalidMaterialChars).length;
   const emptyTags = seo.tags.filter((t) => !t.trim()).length;
+  // Otomatik düzeltilemeyen ihlaller ONAYI ENGELLER (sunucu da 422 ile reddeder): Etsy 400'ü
+  // hattın sonunda, ücretli üretimden sonra gelmesin. Yayında düzeltilenler burada sayılmaz.
+  const issues = validateListingSeo(toEtsySafe(seo));
+  const issuesFor = (f: SeoField) => issues.filter((i) => i.field === f);
+  const physicalMaterials = seo.materials.filter(isPhysicalMaterial).length;
   // Yinelenen etiketler yalnizca ISARETLENIR, engellenmez: onay akisina yeni bir kural
   // koymak davranis degisikligi olurdu.
   const duplicateTags = new Set(
@@ -109,8 +124,24 @@ export function SeoEditor({
                   value={seo.description}
                   onChange={(e) => setField('description', e.target.value)}
                   rows={8}
+                  invalid={issuesFor('description').length > 0}
                 />
               </Field>
+              <IssueList issues={[...issuesFor('title'), ...issuesFor('description')]} />
+              {seo.description.trim() && !hasAiDisclosure(seo.description) ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setField('description', `${seo.description.trimEnd()}
+
+✦ HOW THIS WAS MADE
+${AI_DISCLOSURE_TEXT}`)
+                  }
+                >
+                  AI beyanını açıklamaya ekle
+                </Button>
+              ) : null}
             </div>
           </details>
 
@@ -152,6 +183,7 @@ export function SeoEditor({
                   );
                 })}
               </div>
+              <IssueList issues={issuesFor('tags')} />
               {duplicateTags.size > 0 ? (
                 <p className="mt-3 text-sm font-medium text-gold-deep">
                   Sarı zeminli etiketler yinelenmiş — Etsy tekrarları saymaz.
@@ -178,7 +210,13 @@ export function SeoEditor({
                       value={m}
                       aria-label={`Materyal ${i + 1}`}
                       onChange={(e) => setArrayItem('materials', i, e.target.value)}
-                      className={`px-2.5 py-1.5 ${hasInvalidMaterialChars(m) ? 'border-gold bg-state-turn' : ''}`}
+                      className={`px-2.5 py-1.5 ${
+                        isPhysicalMaterial(m)
+                          ? 'border-state-error-ink bg-state-error'
+                          : hasInvalidMaterialChars(m)
+                            ? 'border-gold bg-state-turn'
+                            : ''
+                      }`}
                     />
                   ))}
                 </div>
@@ -188,6 +226,14 @@ export function SeoEditor({
                     boşluk) — yayında boşluğa çevrilir.
                   </p>
                 ) : null}
+                {physicalMaterials > 0 ? (
+                  <p className="mt-2 text-sm font-medium text-state-error-ink">
+                    Kırmızı zeminli materyaller teslim edilmeyen fiziksel bir malzemeyi (canvas, paper, ink,
+                    frame, PDF…) ima ediyor. Alıcı yalnız dijital JPG alır — dijital ürünü tanımlayan bir
+                    terim yaz.
+                  </p>
+                ) : null}
+                <IssueList issues={issuesFor('materials').filter((i) => !/fiziksel/.test(i.message))} />
               </div>
 
               <div>
@@ -222,14 +268,31 @@ export function SeoEditor({
 
       {/* Eylemler yapışkan: 34 alanı kaydırırken onay butonu hep erişilebilir. */}
       <div className="sticky bottom-0 -mx-5 -mb-5 mt-6 flex flex-wrap gap-3 rounded-b-lg border-t border-sand bg-shade/95 px-5 py-4 backdrop-blur-sm">
-        <Button onClick={() => onApprove(seo)} disabled={busy}>
+        <Button onClick={() => onApprove(seo)} disabled={busy || issues.length > 0}>
           {busy ? <Spinner /> : null}
           Onayla — medya &amp; dosyaları üret
         </Button>
+        {issues.length > 0 ? (
+          <span className="self-center text-sm font-medium text-state-error-ink">
+            {issues.length} alan Etsy kurallarına uymuyor — işaretli alanları düzelt.
+          </span>
+        ) : null}
         <Button variant="ghost" onClick={onReject} disabled={busy}>
           Bu üretimi bırak
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** Alanın Etsy kural ihlalleri (validateListingSeo) — alanın hemen altında. */
+function IssueList({ issues }: { issues: { message: string }[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-1 text-sm font-medium text-state-error-ink">
+      {issues.map((i, k) => (
+        <li key={k}>• {i.message}</li>
+      ))}
+    </ul>
   );
 }

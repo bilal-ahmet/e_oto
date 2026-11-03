@@ -9,7 +9,8 @@ import pThrottle from 'p-throttle';
 import { getEnv } from '@/lib/env';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 import { singleFlight } from '@/lib/async/single-flight';
-import { getOAuthToken, upsertOAuthToken } from '@/lib/db/queries';
+import { getOAuthToken, getSetting, setSetting, upsertOAuthToken } from '@/lib/db/queries';
+import { ApiError, AppError, isInvalidGrant } from '@/lib/errors';
 import { refreshAccessToken } from './oauth';
 
 const API_BASE = 'https://openapi.etsy.com/v3/application';
@@ -36,6 +37,13 @@ export async function persistEtsyTokens(
 }
 
 const REFRESH_KEY = 'etsy:refresh';
+
+function reauthError(): AppError {
+  return new AppError(
+    'auth',
+    "Etsy yetkisi geçersiz (refresh token reddedildi) — panelden 'Yeniden yetkilendir' ile Etsy'ye tekrar bağlan.",
+  );
+}
 const EXPIRY_BUFFER_MS = 60_000; // 60 sn tampon
 
 /**
@@ -54,7 +62,18 @@ async function refreshAndStore(force = false): Promise<string | null> {
   if (!force && token.expiresAt != null && token.expiresAt.getTime() - Date.now() >= EXPIRY_BUFFER_MS) {
     return token.accessToken; // başkası zaten tazeledi
   }
-  const refreshed = await refreshAccessToken(token.refreshToken);
+  // Kalıcı red işaretliyse Etsy'ye aynı ölü token'la tekrar tekrar gitme — yeniden yetkilendirme şart.
+  if (await getSetting('etsy_reauth_required')) throw reauthError();
+  let refreshed;
+  try {
+    refreshed = await refreshAccessToken(token.refreshToken);
+  } catch (e) {
+    if (isInvalidGrant(e)) {
+      await setSetting('etsy_reauth_required', new Date().toISOString());
+      throw reauthError();
+    }
+    throw e;
+  }
   await persistEtsyTokens(
     refreshed.accessToken,
     refreshed.refreshToken,
@@ -73,7 +92,7 @@ async function refreshAndStore(force = false): Promise<string | null> {
 export async function getValidEtsyToken(): Promise<string> {
   const token = await getOAuthToken('etsy');
   if (!token) {
-    throw new Error('Etsy bağlantısı yok — önce /api/auth/etsy/start ile yetkilendir.');
+    throw new AppError('auth', 'Etsy bağlantısı yok — önce /api/auth/etsy/start ile yetkilendir.');
   }
 
   const expiringSoon =
@@ -81,7 +100,7 @@ export async function getValidEtsyToken(): Promise<string> {
 
   if (expiringSoon && token.refreshToken) {
     const access = await singleFlight(REFRESH_KEY, refreshAndStore);
-    if (!access) throw new Error('Etsy refresh token yok — yeniden yetkilendirme gerekiyor.');
+    if (!access) throw new AppError('auth', 'Etsy refresh token yok — yeniden yetkilendirme gerekiyor.');
     return access;
   }
 
@@ -157,10 +176,7 @@ export async function etsyFetch<T = unknown>(path: string, opts: EtsyFetchOption
   const url = `${API_BASE}${path}`;
   const res = await rawFetch(url, { method: opts.method ?? 'GET', headers, body });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Etsy API hatası ${res.status} (${path}): ${text}`);
-  }
+  if (!res.ok) throw await toApiError(res, path);
   // 204 vb. boş gövde
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -183,12 +199,23 @@ export async function etsyPublicFetch<T = unknown>(path: string): Promise<T> {
   };
 
   const res = await rawFetch(`${API_BASE}${path}`, { method: 'GET', headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Etsy API hatası ${res.status} (${path}): ${text}`);
-  }
+  if (!res.ok) throw await toApiError(res, path);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** 2xx olmayan yanıtı yapısal hataya çevirir (mesaj formatı eskisiyle aynı). */
+async function toApiError(res: Response, path: string): Promise<ApiError> {
+  const text = await res.text();
+  const ra = Number(res.headers.get('retry-after'));
+  return new ApiError(
+    'etsy',
+    res.status,
+    path,
+    text,
+    `Etsy API hatası ${res.status} (${path}): ${text}`,
+    Number.isFinite(ra) && ra > 0 ? ra : undefined,
+  );
 }
 
 export { API_BASE };

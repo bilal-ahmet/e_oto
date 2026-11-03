@@ -4,19 +4,27 @@ import type { PinCopy, PipelineRun } from '@/types';
 import { Button, Card } from '@/components/ui';
 import { PipelineWarnings } from './PipelineWarnings';
 import { SeoSummary } from './SeoSummary';
-import { PinterestPanel } from './PinterestPanel';
+import { PinterestPanel, type PinRequestOptions } from './PinterestPanel';
+import { listingStateLabel } from '@/lib/status';
+import { formatTr } from '@/lib/format';
 
 export function DoneView({
   run,
   onReset,
   onPinPinterest,
   pinning,
+  onCheckEtsyState,
+  checkingState,
 }: {
   run: PipelineRun;
   onReset: () => void;
-  onPinPinterest: (copy: PinCopy) => void;
+  onPinPinterest: (copy: PinCopy, opts: PinRequestOptions) => void;
   pinning: boolean;
+  /** Etsy'deki gerçek durumu SALT OKUNUR okut (api/pipeline/etsy-state), sonra run'ı tazele. */
+  onCheckEtsyState: () => void;
+  checkingState: boolean;
 }) {
+  const active = run.etsyListingState === 'active';
   return (
     <Card>
       <div className="flex items-center gap-2 text-state-done-ink">
@@ -29,12 +37,25 @@ export function DoneView({
         Bu uyarı olmadan kullanıcı ilanın canlı olduğunu sanıyordu; üstelik taslak bir ilana
         Pinterest pini atmak ölü link üretiyor. Sıradaki adım açıkça söylenir.
       */}
-      <div className="mt-4 rounded-md border-l-4 border-l-gold bg-state-turn px-4 py-3">
-        <p className="text-sm font-medium text-state-turn-ink">İlan taslak durumda — henüz satışta değil.</p>
-        <p className="mt-1 text-sm text-state-turn-ink">
-          Son kontrolü yapıp Etsy panelinden yayına alman gerekiyor. Pinterest pinini de{' '}
-          <strong>ilan yayına girdikten sonra</strong> at; taslak ilanın linki çalışmaz.
+      <div className={`mt-4 rounded-md border-l-4 px-4 py-3 ${active ? 'border-l-state-done-ink bg-state-done' : 'border-l-gold bg-state-turn'}`}>
+        <p className={`text-sm font-medium ${active ? 'text-state-done-ink' : 'text-state-turn-ink'}`}>
+          {listingStateLabel(run.etsyListingState)}
+          {run.etsyStateCheckedAt ? ` · son kontrol ${formatTr(run.etsyStateCheckedAt)}` : ''}
         </p>
+        {active ? null : (
+          <p className="mt-1 text-sm text-state-turn-ink">
+            Hat ilanı Etsy&apos;ye <strong>taslak</strong> olarak aktarır. Son kontrolü yapıp Etsy panelinden
+            yayına alman gerekiyor. Pinterest pini yalnız ilan Etsy&apos;de aktif okunduğunda atılır.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onCheckEtsyState}
+          disabled={checkingState}
+          className="mt-2 mr-4 text-sm font-medium underline disabled:opacity-60"
+        >
+          {checkingState ? 'Etsy okunuyor…' : 'Etsy durumunu kontrol et'}
+        </button>
         {run.etsyListingId ? (
           <a
             href={`https://www.etsy.com/your/shops/me/tools/listings/${run.etsyListingId}`}
@@ -77,7 +98,7 @@ export function DoneView({
       </div>
 
       {run.pinterestPinId ? null : (
-        <PinterestPanel runId={run.id} onPin={onPinPinterest} pinning={pinning} />
+        <PinterestPanel run={run} onPin={onPinPinterest} pinning={pinning} />
       )}
     </Card>
   );

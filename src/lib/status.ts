@@ -1,4 +1,4 @@
-import type { PipelineStatus } from '@/types';
+import type { ErrorKind, PipelineRun, PipelineStatus } from '@/types';
 
 /**
  * Durum sınıfı — kullanıcının tek soruya cevap alması için: "sıra kimde?"
@@ -91,11 +91,58 @@ export const STATUS_META: Record<
     kind: 'final',
     className: 'bg-state-done text-state-done-ink ring-state-done-ink/20',
   },
+  rejected: {
+    label: 'Reddedildi',
+    // Kullanıcı kararı — teknik hata DEĞİL; "Teknik hata" sayacına girmez.
+    description: 'Görsel ya da çıktı kullanıcı tarafından reddedildi; ücretli adımlar çalıştırılmadı.',
+    kind: 'final',
+    className: 'bg-state-idle text-state-idle-ink ring-state-idle-ink/20',
+  },
   error: {
-    label: 'Hata',
+    label: 'Teknik hata',
     description: 'İşlem yarıda durdu. Sebebi aşağıda yazıyor.',
     kind: 'final',
     className: 'bg-state-error text-state-error-ink ring-state-error-ink/20',
+  },
+};
+
+/**
+ * Reddetme mesajı. 0012'den ÖNCE red `status='error'` + bu mesajla yazılıyordu; o tarihsel
+ * kayıtlar DB'de DEĞİŞTİRİLMEDEN `displayStatus` / sayaç sorgusu ile "Reddedildi" sınıflanır.
+ * Metni değiştirme — eski kayıtlar tam eşleşmeyle tanınır.
+ */
+export const REJECT_MESSAGE = 'Görsel kullanıcı tarafından reddedildi.';
+
+/** Gösterim durumu: eski (status='error' + red mesajı) kayıtlar 'rejected' olarak görünür. */
+export function displayStatus(run: Pick<PipelineRun, 'status' | 'errorMessage'>): PipelineStatus {
+  if (run.status === 'error' && run.errorMessage === REJECT_MESSAGE) return 'rejected';
+  return run.status;
+}
+
+/**
+ * Hata sınıfı → kısa etiket + kullanıcının yapması gereken düzeltme. Panel hata satırında
+ * mesajın yanında gösterilir; "ne oldu" kadar "ne yapmalıyım" da görünsün.
+ */
+export const ERROR_KIND_META: Record<ErrorKind, { label: string; hint: string }> = {
+  validation: {
+    label: 'İçerik/dosya hatası',
+    hint: 'Aynı içerikle tekrar denemek işe yaramaz — belirtilen alanı/dosyayı düzeltip tekrar onayla.',
+  },
+  auth: {
+    label: 'Yetki hatası',
+    hint: 'Panelden ilgili hesabı yeniden yetkilendir, sonra kaldığı adımdan sürdür.',
+  },
+  rate_limit: {
+    label: 'İstek limiti',
+    hint: 'Servis istek limitine ulaşıldı — birkaç dakika bekleyip kaldığı adımdan sürdür.',
+  },
+  transient: {
+    label: 'Geçici servis/ağ hatası',
+    hint: 'Servis geçici olarak yanıt vermedi — kaldığı adımdan sürdürmeyi dene.',
+  },
+  internal: {
+    label: 'Uygulama hatası',
+    hint: 'Beklenmeyen bir hata — mesajı kaydet; tekrarlarsa koda bakılmalı.',
   },
 };
 
@@ -112,3 +159,29 @@ export const PIPELINE_ORDER: PipelineStatus[] = [
   'done',
   'publishing_pinterest',
 ];
+
+/** Etsy'den geri okunan ilan durumunun panel etiketi (`lib/pipeline/listing-state.ts`). */
+export function listingStateLabel(state: string | undefined): string {
+  switch (state) {
+    case undefined:
+      return 'Etsy durumu kontrol edilmedi';
+    case 'active':
+      return 'Etsy’de aktif ✓';
+    case 'draft':
+      return 'Etsy’de taslak';
+    case 'inactive':
+      return 'Etsy’de pasif';
+    case 'sold_out':
+      return 'Etsy’de tükendi';
+    case 'expired':
+      return 'Etsy’de süresi doldu';
+    case 'not_found':
+      return 'Etsy’de bulunamadı';
+    case 'foreign_shop':
+      return 'Başka mağazaya ait — eşleşme hatalı';
+    case 'unknown':
+      return 'Etsy durumu bilinmiyor (kontrol başarısız)';
+    default:
+      return `Etsy durumu: ${state}`;
+  }
+}

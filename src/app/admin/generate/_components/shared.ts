@@ -47,6 +47,7 @@ export function stageIndexFor(status: PipelineStatus | 'idle'): number {
     case 'done':
       return 4;
     case 'error':
+    case 'rejected':
       return -1;
   }
 }

@@ -8,21 +8,15 @@
  */
 
 import { Alert, LinkButton } from '@/components/ui';
+import { ConnectionHealthLine } from '@/components/ConnectionHealthLine';
 import { PinterestBoardPicker } from '@/components/PinterestBoardPicker';
+import { connectionHealth } from '@/lib/connection/health';
 import { getOAuthTokenMeta, getSetting } from '@/lib/db/queries';
+import { formatTr } from '@/lib/format';
 import { apiEnv, isSandbox } from '@/lib/pinterest/hosts';
 import { listBoards, type PinterestBoard } from '@/lib/pinterest/boards';
 
-function fmt(d: Date | null): string {
-  if (!d) return '—';
-  return d.toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const fmt = (d: Date | null) => formatTr(d, { year: true });
 
 /**
  * Pinterest refresh token'ı 60 gün geçerlidir ama her kullanımda yenilenir (continuous
@@ -31,16 +25,18 @@ function fmt(d: Date | null): string {
 const REFRESH_TOKEN_DAYS = 60;
 
 async function loadStatus() {
-  const [meta, tokenEnv, boardId] = await Promise.all([
+  const [meta, tokenEnv, boardId, health] = await Promise.all([
     getOAuthTokenMeta('pinterest'),
     getSetting('pinterest_token_env'),
     getSetting('pinterest_board_id'),
+    connectionHealth('pinterest'),
   ]);
   // Date.now() bilerek render dışında okunur (React derleyicisi saf olmayan çağrılara izin vermez).
   const since = meta.updatedAt ? Date.now() - meta.updatedAt.getTime() : 0;
   const daysLeft = Math.max(REFRESH_TOKEN_DAYS - Math.floor(since / 86_400_000), 0);
   return {
     ...meta,
+    health,
     daysLeft,
     expiringSoon: meta.connected && daysLeft <= 14,
     tokenEnv,
@@ -116,18 +112,20 @@ export async function PinterestConnection({
   // uyuşmazlığı varken Pinterest'e boşuna çağrı yapılmaz.
   const { boards, error: boardsError } = await loadBoards();
 
+  const bad = ['reauth_required', 'auth_error'].includes(meta.health.state);
   return (
     <Alert
-      tone={meta.expiringSoon ? 'warning' : 'info'}
-      title="Pinterest bağlı"
+      tone={bad ? 'danger' : meta.expiringSoon || meta.health.state === 'transient' ? 'warning' : 'info'}
+      title="Pinterest hesabı"
       action={connectButton}
       className="mb-6"
     >
       <p className="text-sm">
-        <span className="mr-2 inline-block size-1.5 rounded-full bg-state-done-ink align-middle" aria-hidden />
-        {apiEnv()} · Son yetkilendirme: {fmt(meta.updatedAt)} · Geçerlilik: {fmt(meta.expiresAt)}
+        {apiEnv()} · Son yetkilendirme/yenileme: {fmt(meta.updatedAt)} · Erişim anahtarı (≈30 gün,
+        otomatik yenilenir): {fmt(meta.expiresAt)} · Yenileme anahtarı: ~{meta.daysLeft} gün
         {callbackResult?.status === 'connected' ? ' · yetkilendirme tamamlandı' : ''}
       </p>
+      <ConnectionHealthLine provider="pinterest" health={meta.health} />
       {meta.hasRefreshToken ? null : (
         <p className="mt-1">Yenileme anahtarı YOK — süre dolunca yeniden bağlanmalısınız.</p>
       )}

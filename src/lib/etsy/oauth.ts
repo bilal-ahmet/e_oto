@@ -9,6 +9,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
+import { ApiError } from '@/lib/errors';
 
 const CONNECT_URL = 'https://www.etsy.com/oauth/connect';
 const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
@@ -93,7 +94,7 @@ async function postToken(body: Record<string, string>): Promise<EtsyTokens> {
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Etsy token isteği başarısız (${res.status}): ${text}`);
+    throw new ApiError('etsy', res.status, 'oauth/token', text, `Etsy token isteği başarısız (${res.status}): ${text}`);
   }
   const data = (await res.json()) as TokenResponse;
   return {

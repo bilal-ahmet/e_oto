@@ -1,12 +1,19 @@
 /**
  * Etsy açıklama şablonları (CLAUDE.md §10). Claude ürün-özel HOOK + PERFECT FOR üretir;
  * geri kalan sabit gövde ürün tipine göre burada birleştirilir.
- *  - print: 5 JPG, 300 DPI, PRINT_RATIOS boyut listesi, baskı talimatları.
- *  - tv:    2 JPG (4K + Full HD), ekran kullanımı, Frame TV görüntüleme talimatları.
+ *  - print: JPG'ler (adet/boyut productConfig'ten), PRINT_RATIOS boyut listesi, baskı talimatları.
+ *  - tv:    JPG'ler (4K + Full HD, piksel productConfig'ten), ekran kullanımı, Frame TV talimatları.
+ *
+ * DOSYA VAATLERİ KODDAN TÜRETİLİR: adet, piksel ve oran `productConfig().files`'tan gelir — elle
+ * yazılan "5 dosya / 4K" metni teslim edilenle ayrışabiliyordu. Ekran dosyalarında DPI yazılmaz
+ * (ekranda anlamsız; çözünürlük pikseldir). İki şablonda da AI üretim beyanı ZORUNLU
+ * (`validateListingSeo` yayından önce kontrol eder) — hattın tüm görselleri AI ile üretilir.
  */
 
 import { PRINT_RATIOS, type ProductType } from '@/types';
 import { getEnv } from '@/lib/env';
+import { productConfig } from '@/lib/product/config';
+import { AI_DISCLOSURE_TEXT as AI_NOTE } from '@/lib/etsy/text-rules';
 
 const DIVIDER = '──────────────────────';
 
@@ -26,6 +33,9 @@ function sizeLines(): string {
 export function buildPrintDescription(hook: string, perfectFor: string[]): string {
   const shopName = getEnv().ETSY_SHOP_NAME;
   const perfect = perfectFor.map((p) => p.trim()).filter(Boolean).join(' · ');
+  const printFiles = productConfig('print').files;
+  // Alt boyutların sayısı (A serisi notu hariç) — "20+ sizes" elle yazılmaz.
+  const sizeCount = Math.floor(PRINT_RATIOS.reduce((n, r) => n + r.subSizes.length, 0) / 5) * 5;
 
   return `${hook.trim()}
 
@@ -34,7 +44,7 @@ export function buildPrintDescription(hook: string, perfectFor: string[]): strin
 ${DIVIDER}
 
 ✦ WHAT YOU'LL RECEIVE
-5 high-resolution JPG files (RGB, 300 DPI) — instant download, no physical item shipped. Print in 20+ sizes:
+${printFiles.length} high-resolution JPG files (RGB) — one per aspect ratio, each 300 PPI at its largest size listed below. Instant download, no physical item shipped. Print in ${sizeCount}+ sizes:
 
 ${sizeLines()}
 
@@ -51,11 +61,20 @@ Print at home on quality matte or photo paper, at a local print shop, or via an 
 ✦ PLEASE NOTE
 Colors may vary slightly between screens and printers. This is a digital product — nothing will be shipped.
 
+✦ HOW THIS WAS MADE
+${AI_NOTE}
+
 ✦ TERMS
 For personal use only. Reselling, sharing, or redistributing the files is not permitted. © ${shopName}.
 
 Thank you for visiting! Follow the shop to see new arrivals first. 🤍`;
 }
+
+/** Ekran dosyası anahtarı → açıklamadaki kullanım notu (piksel değeri spec'ten gelir). */
+const TV_FILE_NOTE: Record<string, string> = {
+  screen_4k: ' (4K Ultra HD) — perfect fit for the Samsung Frame TV',
+  screen_fhd: ' (Full HD) — for standard smart TVs and digital frames',
+};
 
 /**
  * Frame TV / ekran (tv) açıklaması — kullanıcının verdiği şablon.
@@ -65,6 +84,8 @@ Thank you for visiting! Follow the shop to see new arrivals first. 🤍`;
 export function buildTvDescription(hook: string, perfectFor: string[]): string {
   const shopName = getEnv().ETSY_SHOP_NAME;
   const perfect = perfectFor.map((p) => p.trim()).filter(Boolean).join(' · ');
+  const tvFiles = productConfig('tv').files;
+  const tvLines = tvFiles.map((f) => `- ${f.width}x${f.height} px${TV_FILE_NOTE[f.key] ?? ''}`).join('\n');
 
   return `${hook.trim()}
 
@@ -73,11 +94,10 @@ export function buildTvDescription(hook: string, perfectFor: string[]): string {
 ${DIVIDER}
 
 ✦ WHAT YOU'LL RECEIVE
-2 high-resolution JPG files (RGB, 300 DPI), ready for your screen:
-- 3840x2160 px (4K Ultra HD) — perfect fit for the Samsung Frame TV (16:9)
-- 1920x1080 px (Full HD) — for standard smart TVs and digital frames
+${tvFiles.length} high-resolution JPG files (RGB, 16:9), ready for your screen:
+${tvLines}
 
-Also works on Roku TVs, smart displays, and digital photo frames. Need a different resolution for your screen? Just message me — I'm happy to provide a custom size for free.
+Also works on smart displays and digital photo frames; on compatible Roku devices you can show it with Roku Backdrops. Need a different resolution for your screen? Just message me — I'm happy to provide a custom size for free.
 
 ⚠️ SCREEN USE ONLY: This file is optimized for digital display and is not suitable for printing. Looking for printable wall art? Visit the shop for print versions.
 
@@ -99,7 +119,7 @@ Official Samsung guide: samsung.com/us/support/answer/ANS00076727
 Colors may vary slightly between screens. This is a digital product — nothing will be shipped. Due to the nature of digital downloads, all sales are final.
 
 ✦ HOW THIS WAS MADE
-This design was created using AI image-generation tools based on my own original prompts and creative direction, then curated and refined for digital display.
+${AI_NOTE}
 
 ✦ TERMS
 For personal use only. Reselling, redistributing, sharing, or using AI to copy or regenerate this artwork is not permitted. © ${shopName}.

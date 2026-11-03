@@ -4,7 +4,8 @@
  * Müşteri açıklamadaki alt boyutları baskıcıda küçülterek alır. 5 oran = 5 JPG.
  * Kalite/DPI ürün tipinden gelir (`productConfig(...).jpeg`): DPI her tipte 300; baskı q90 4:2:0,
  * Frame TV q97 4:4:4 (dosyalar küçük olduğu için kalite yukarı çekilebiliyor).
- * Her JPG <20MB olmalı; aşarsa kalite %5 düşürülerek tekrar denenir (zemin %60).
+ * Her JPG <20MB olmalı; aşarsa kalite %5 düşürülerek tekrar denenir (zemin %60). Zeminde hâlâ
+ * büyükse dosya ÜRETİLMEZ — doğrulama (`validate.ts`) hatayla durdurur (Etsy reddederdi).
  *
  * BELLEK/CPU SÖZLEŞMESİ (canlıdaki 504/OOM'un kök nedeni buydu — ölçümlerle):
  *  - Oranlar SIRAYLA işlenir. Eski `Promise.all` hali 5 × ~77 megapiksellik pipeline'ı aynı anda
@@ -18,6 +19,7 @@
 
 import { sharp } from '@/lib/image/sharp';
 import type { DigitalFileSpec, JpegExportSettings } from '@/lib/product/config';
+import { PackageValidator } from './validate';
 
 export interface DigitalFile {
   key: string; // digitalFileUrls anahtarı (print RatioKey veya tv 'screen_*')
@@ -42,18 +44,23 @@ export async function packageJpegs(
   specs: DigitalFileSpec[],
   jpeg: JpegExportSettings,
   onFile: (file: DigitalFile) => Promise<void>,
-): Promise<void> {
+): Promise<{ upsampledWarning?: string }> {
   // Master hedeften küçükse sharp yukarı örnekler → yumuşak/detaysız çıktı. Sessizce olmasın:
   // pratikte upscale adımının pass-through'a düştüğü (FAL_KEY/kredi yok) anlamına gelir.
+  // Çağıran bunu run uyarısına yazar (gate 3'te görünür) — "yüksek çözünürlük" vaadi tartılsın.
   const meta = await sharp(master).metadata();
   const short = Math.min(meta.width ?? 0, meta.height ?? 0);
   const needed = Math.max(...specs.map((s) => Math.min(s.width, s.height)));
+  let upsampledWarning: string | undefined;
   if (short && short < needed) {
-    console.warn(
-      `[packaging] Master ${meta.width}×${meta.height}, en büyük hedef kısa kenarı ${needed}px — ` +
-        'dosyalar yukarı örneklenecek (upscale pass-through mı?). Çıktı kalitesi düşük olacak.',
-    );
+    upsampledWarning =
+      `Master görsel ${meta.width}×${meta.height} px; en büyük dosyanın kısa kenarı ${needed} px — ` +
+      'dosyalar piksel olarak doğru boyutta ama yukarı örneklendi (gerçek detay daha düşük). Upscale düşmüş olabilir.';
+    console.warn(`[packaging] ${upsampledWarning}`);
   }
+
+  // Her dosya ÜRETİLDİĞİ ANDA doğrulanır (piksel, oran, 20 MB, yinelenen içerik); buffer'lar biriktirilmez.
+  const validator = new PackageValidator(specs);
 
   for (const s of specs) {
     let quality = jpeg.quality;
@@ -74,6 +81,9 @@ export async function packageJpegs(
       if (buffer.length <= MAX_BYTES || quality <= MIN_QUALITY) break;
       quality -= 5;
     }
+    await validator.check(s, buffer);
     await onFile({ key: s.key, filename: s.fileName, buffer, contentType: 'image/jpeg' });
   }
+  validator.assertComplete();
+  return { upsampledWarning };
 }

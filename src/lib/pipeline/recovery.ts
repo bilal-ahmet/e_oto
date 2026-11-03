@@ -43,6 +43,8 @@ async function sweep(): Promise<void> {
         await updatePipelineRun(run.id, {
           status: 'error',
           errorMessage: `Otomatik kurtarma ${MAX_ATTEMPTS} denemede başarısız — manuel inceleme gerekli.`,
+          errorStage: run.status,
+          errorKind: 'transient',
         });
         continue;
       }
@@ -51,17 +53,19 @@ async function sweep(): Promise<void> {
       switch (run.status) {
         case 'generating_seo':
           if (run.generatedImageUrl) void selectImageForRun(run.id, run.generatedImageUrl);
-          else await updatePipelineRun(run.id, { status: 'error', errorMessage: 'Kurtarma: seçili görsel yok.' });
+          else await updatePipelineRun(run.id, { status: 'error', errorMessage: 'Kurtarma: seçili görsel yok.', errorStage: run.status, errorKind: 'internal' });
           break;
         case 'processing_files':
           if (run.seo) void approveSeoAndProcess(run.id, run.seo);
-          else await updatePipelineRun(run.id, { status: 'error', errorMessage: 'Kurtarma: SEO yok.' });
+          else await updatePipelineRun(run.id, { status: 'error', errorMessage: 'Kurtarma: SEO yok.', errorStage: run.status, errorKind: 'internal' });
           break;
         case 'publishing_etsy':
           void publishToEtsy(run.id); // kalıcı publishProgress checkpoint'inden devam
           break;
         case 'publishing_pinterest':
-          void publishToPinterest(run.id); // checkpoint yok, tüm çağrı tekrarlanır
+          // Kör tekrar YOK: önceki POST /pins denemesi işaretliyse (pin_attempted_at) publishToPinterest
+          // önce panodaki pinlerle mutabakat yapar, bulamazsa kullanıcıya bırakır (çift pin önlenir).
+          void publishToPinterest(run.id);
           break;
         case 'generating_image':
         default:
@@ -69,6 +73,8 @@ async function sweep(): Promise<void> {
           await updatePipelineRun(run.id, {
             status: 'error',
             errorMessage: 'Görsel üretimi kesintiye uğradı — lütfen yeniden başlatın.',
+            errorStage: run.status,
+            errorKind: 'transient',
           });
           break;
       }

@@ -9,6 +9,7 @@
 import { randomBytes } from 'crypto';
 import { getEnv } from '@/lib/env';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
+import { ApiError } from '@/lib/errors';
 import { AUTH_URL, tokenUrl } from './hosts';
 
 // CLAUDE.md §8: pin okuma/yazma + board okuma (board_id çözümü) + board yazma.
@@ -94,7 +95,7 @@ async function postToken(body: Record<string, string>): Promise<PinterestTokens>
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Pinterest token isteği başarısız (${res.status}): ${text}`);
+    throw new ApiError('pinterest', res.status, 'oauth/token', text, `Pinterest token isteği başarısız (${res.status}): ${text}`);
   }
   const data = (await res.json()) as TokenResponse;
   return {

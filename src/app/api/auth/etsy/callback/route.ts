@@ -4,7 +4,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { exchangeCode } from '@/lib/etsy/oauth';
-import { upsertOAuthToken } from '@/lib/db/queries';
+import { deleteSetting, upsertOAuthToken } from '@/lib/db/queries';
 import { env } from '@/lib/env';
 
 export async function GET(req: NextRequest) {
@@ -31,6 +31,9 @@ export async function GET(req: NextRequest) {
     // İlk yetkilendirmede korunacak eski token yok (yeniden bağlanmada eskisi zaten geçersiz),
     // bu yüzden persistEtsyTokens değil doğrudan upsert. Yenilemedeki koruma için bkz. etsy/client.
     await upsertOAuthToken('etsy', tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt);
+    // Yeni yetki: eski "refresh reddedildi" işareti ve son kontrol sonucu artık geçersiz.
+    await deleteSetting('etsy_reauth_required');
+    await deleteSetting('etsy_last_check');
   } catch (e) {
     const reason = e instanceof Error ? e.message : 'token_exchange_failed';
     return NextResponse.redirect(`${base}/admin?etsy=error&reason=${encodeURIComponent(reason)}`);

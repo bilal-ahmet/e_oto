@@ -18,10 +18,12 @@ import { generateImages } from '@/lib/image-gen';
 import { generateSeo } from '@/lib/claude/seo';
 import { upscale } from '@/lib/upscale/client';
 import { packageJpegs } from '@/lib/packaging/resize-and-export';
+import { assertFileKeys } from '@/lib/packaging/validate';
 import { generateAllMockups, generateMockup } from '@/lib/mockup/client';
 import { productConfig } from '@/lib/product/config';
 import { hasFal, uploadBuffer } from '@/lib/fal';
-import { createPin } from '@/lib/pinterest/pins';
+import { createPin, findPinForListing, getPin, resolveBoardId } from '@/lib/pinterest/pins';
+import { refreshListingState } from '@/lib/pipeline/listing-state';
 import { fallbackPinCopy, generatePinCopy } from '@/lib/claude/pin-copy';
 import { makeZoomVideo } from '@/lib/video/zoom';
 import { getSizeGuide } from '@/lib/listing/size-guide';
@@ -35,6 +37,9 @@ import {
   uploadListingImage,
   uploadListingVideo,
 } from '@/lib/etsy/listings';
+import { AppError, classifyError } from '@/lib/errors';
+import { toEtsySafe, validateListingSeo } from '@/lib/etsy/text-rules';
+import { REJECT_MESSAGE, listingStateLabel } from '@/lib/status';
 import type { ImageModel, MediaUrls, PinCopy, PipelineRun, PublishProgress, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
@@ -279,7 +284,11 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
       master = await readObject(keyFromUrl(masterUrl));
     } else {
       const selected = await readObject(keyFromUrl(run.generatedImageUrl));
-      master = await upscale(selected); // clarity ×4; fal yoksa pass-through
+      const up = await upscale(selected); // clarity ×4; fal yoksa pass-through
+      master = up.buffer;
+      if (up.fallback) {
+        await addWarning(runId, `Upscale yapılamadı, ham görsel kullanıldı (${up.fallback}) — dosyaların gerçek detayı düşük olabilir.`);
+      }
       masterUrl = await putObject(`runs/${runId}/master.png`, master, 'image/png');
     }
 
@@ -296,11 +305,15 @@ async function approveSeoAndProcessInner(runId: string, seo: SeoData): Promise<v
     let digitalFileUrls = run.digitalFileUrls as Record<string, string> | undefined;
     if (!digitalFileUrls || Object.keys(digitalFileUrls).length === 0) {
       const map: Record<string, string> = {};
-      await packageJpegs(master, cfg.files, cfg.jpeg, async (f) => {
+      // packageJpegs her dosyayı piksel/oran/20 MB/yinelenen içerik açısından doğrular; ihlalde durur.
+      const pkg = await packageJpegs(master, cfg.files, cfg.jpeg, async (f) => {
         map[f.key] = await putObject(`runs/${runId}/${f.filename}`, f.buffer, f.contentType);
       });
+      if (pkg.upsampledWarning) await addWarning(runId, pkg.upsampledWarning);
       digitalFileUrls = map;
     }
+    // Resume'da da: kayıtlı dosya kümesi spec ile (adet + anahtar) birebir aynı olmalı.
+    assertFileKeys(digitalFileUrls, cfg.files);
     await updatePipelineRun(runId, { upscaledImageUrl: masterUrl, digitalFileUrls });
 
     // Mevcut medyayı koru (resume): tamamlanmış mockup/video/ölçü tekrar üretilmez.
@@ -436,8 +449,26 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
     const taxonomyId = await getDigitalPrintsTaxonomyId();
     const seo = { ...run.seo, categoryId: String(taxonomyId) };
 
-    // 1) Taslak listing — varsa (checkpoint/etsyListingId) YENİDEN OLUŞTURMA (çift listing önlenir).
+    // 0) Ön koşullar — Etsy'ye HİÇBİR istek gitmeden: düzeltilemeyen alan ihlali ya da gösterilecek
+    //    görsel yoksa listing açılmaz (Etsy 400'ünü aynı içerikle tekrar denemek işe yaramaz).
     let listingId = pp.listingId ?? run.etsyListingId;
+    if (!listingId) {
+      const issues = validateListingSeo(toEtsySafe(seo));
+      if (issues.length > 0) {
+        throw new AppError(
+          'validation',
+          `Etsy'ye gönderilmedi — düzeltilmesi gereken alanlar: ${issues.map((i) => `[${i.field}] ${i.message}`).join(' ')}`,
+        );
+      }
+      if (!(run.mediaUrls?.mockups ?? []).some((u) => u)) {
+        throw new AppError(
+          'validation',
+          "Etsy'ye gönderilmedi — yüklenecek hiçbir mockup görseli yok. Gate 3'te mockup'ları yeniden üretin.",
+        );
+      }
+    }
+
+    // 1) Taslak listing — varsa (checkpoint/etsyListingId) YENİDEN OLUŞTURMA (çift listing önlenir).
     if (!listingId) {
       listingId = await createDraftListing(shopId, seo, pp.price);
       pp.listingId = listingId;
@@ -446,7 +477,15 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
 
     // 2) Öznitelikler — bir kez.
     if (!pp.attributesDone) {
-      await setListingAttributes(shopId, listingId, taxonomyId, seo.attributes);
+      const attrFailures = await setListingAttributes(shopId, listingId, taxonomyId, seo.attributes);
+      if (attrFailures.length > 0) {
+        await addWarning(
+          runId,
+          `Bazı öznitelikler Etsy'ye yazılamadı (listing yine oluşturuldu; Etsy panelinden elle seçebilirsiniz): ${attrFailures.join('; ')}`,
+        );
+        const fresh = await getPipelineRun(runId);
+        pp.warnings = fresh?.publishProgress?.warnings ?? pp.warnings;
+      }
       pp.attributesDone = true;
       await updatePipelineRun(runId, { publishProgress: pp });
     }
@@ -519,27 +558,86 @@ async function publishToEtsyInner(runId: string, price?: number, thumbnailIndex?
  * Pinterest'te pin oluşturur — Etsy yayınından SONRA, kullanıcı Etsy panelinden listing'i kendisi
  * aktive ettikten sonra elle tetiklenir (Etsy adımı listing'i bilerek taslak bırakıyor; taslak/
  * yayında-olmayan bir listing'e pin atmak ölü link üretir, bu yüzden otomatik zincirlenmez).
- * Etsy adımının aksine tek atomik `POST /pins` çağrısıdır — checkpoint yok, resume tüm işlemi tekrarlar.
+ *
+ * Güvenceler (Velora notu, 2026-11):
+ *  1. Hedef ilan Etsy'den SALT OKUNUR yeniden okunur; `active` değilse ya da başka mağazaya aitse
+ *     pin ATILMAZ — run `done`'da kalır, sebep uyarı olarak yazılır (fail-closed).
+ *  2. `POST /pins` öncesi `pin_attempted_at` + pano yazılır. Önceki deneme işaretliyse ve pin id
+ *     yoksa (zaman aşımı/çökme — sonuç belirsiz) yeniden pinlemeden ÖNCE panoda bu ilana bağlı pin
+ *     aranır: bulunursa benimsenir, bulunamazsa kullanıcıya bırakılır (`force` ile bilinçli tekrar).
+ *     Pinterest'in idempotency desteği VARSAYILMAZ.
+ *  3. Pin oluşturulduktan sonra geri okunup link/pano doğrulanır; uyuşmazlık uyarı olur.
+ * Görsel ve hedef aynı run'dan gelir (run'ın kendi mockup'ı + kendi listing'i) — eşleşme yapı gereği.
  */
-export async function publishToPinterest(runId: string, copy?: PinCopy): Promise<void> {
-  return withRunLease(runId, 'publishToPinterest', () => publishToPinterestInner(runId, copy));
+export interface PinOptions {
+  /** Pin'in atılacağı pano; verilmezse panelde seçili varsayılan. */
+  boardId?: string;
+  /** Önceki belirsiz denemeye rağmen yeni pin at (kullanıcı Pinterest'te kontrol etti). */
+  force?: boolean;
 }
 
-async function publishToPinterestInner(runId: string, copy?: PinCopy): Promise<void> {
+export async function publishToPinterest(runId: string, copy?: PinCopy, opts: PinOptions = {}): Promise<void> {
+  return withRunLease(runId, 'publishToPinterest', () => publishToPinterestInner(runId, copy, opts));
+}
+
+/** Pin atmadan `done`'a döner ve sebebi kalıcı uyarı olarak yazar (teknik hata DEĞİL). */
+async function holdPin(runId: string, reason: string): Promise<void> {
+  await updatePipelineRun(runId, { status: 'done', attempts: 0 });
+  await addWarning(runId, reason);
+}
+
+async function publishToPinterestInner(runId: string, copy: PinCopy | undefined, opts: PinOptions): Promise<void> {
   try {
     const run = await getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run bulunamadı: ${runId}`);
-    if (!run.etsyListingId) throw new Error('Önce Etsy yayını tamamlanmalı.');
-    if (run.pinterestPinId) throw new Error("Bu run zaten Pinterest'te pinlenmiş.");
+    if (!run.etsyListingId) throw new AppError('validation', 'Önce Etsy yayını tamamlanmalı.');
+    if (run.pinterestPinId) throw new AppError('validation', "Bu run zaten Pinterest'te pinlenmiş.");
+    const listingId = run.etsyListingId;
 
     await updatePipelineRun(runId, { status: 'publishing_pinterest', errorMessage: null });
+
+    // 1) Hedef ilan GERÇEKTEN aktif ve bizim mi? (Okunamazsa da pin atılmaz.)
+    const st = await refreshListingState(runId);
+    if (st?.state !== 'active') {
+      await holdPin(
+        runId,
+        `Pin atılmadı — Etsy ilanı #${listingId} şu an aktif değil (${listingStateLabel(st?.state)}` +
+          `${st?.error ? `: ${st.error}` : ''}). İlanı Etsy'de yayına alıp tekrar deneyin.`,
+      );
+      return;
+    }
+
+    const boardId = opts.boardId || (await resolveBoardId());
+
+    // 2) Önceki deneme sonucu belirsizse önce mutabakat — kör tekrar çift pin üretir.
+    if (run.pinAttemptedAt && !opts.force) {
+      const attemptedBoard = run.pinterestBoardId ?? boardId;
+      const existing = await findPinForListing(attemptedBoard, listingId);
+      if (existing) {
+        await updatePipelineRun(runId, {
+          pinterestPinId: existing.id,
+          pinterestBoardId: attemptedBoard,
+          status: 'done',
+          attempts: 0,
+        });
+        await addWarning(runId, `Önceki denemede oluşmuş pin panoda bulundu ve kaydedildi (pin ${existing.id}) — yeni pin atılmadı.`);
+        return;
+      }
+      await holdPin(
+        runId,
+        `Önceki pin denemesinin sonucu belirsizdi (${run.pinAttemptedAt}) ve panoda bu ilana bağlı pin ` +
+          `bulunamadı. Çift pin olmasın diye otomatik tekrar YAPILMADI — Pinterest'te kontrol edip ` +
+          `"Yine de pinle" ile tekrar deneyebilirsiniz.`,
+      );
+      return;
+    }
 
     const mockups = run.mediaUrls?.mockups ?? [];
     const idx = run.publishProgress?.thumbnailIndex ?? 0;
     const imageUrl = mockups[idx] || mockups.find((u) => u);
-    if (!imageUrl) throw new Error('Pinlenecek bir mockup görseli bulunamadı.');
+    if (!imageUrl) throw new AppError('validation', 'Pinlenecek bir mockup görseli bulunamadı.');
 
-    const listingUrl = `https://www.etsy.com/listing/${run.etsyListingId}`;
+    const listingUrl = `https://www.etsy.com/listing/${listingId}`;
 
     // Kullanıcı gate'te metni onayladıysa o kullanılır. Onaysız (ör. kurtarma sweeper'ı)
     // çağrıda metin üretilir; Claude patlarsa eski davranışa düşülür — pin, yalnızca metin
@@ -554,22 +652,48 @@ async function publishToPinterestInner(runId: string, copy?: PinCopy): Promise<v
       }
     }
 
+    // Deneme işareti POST'tan ÖNCE: yanıt kaybolursa sonraki deneme mutabakat yapar.
+    await updatePipelineRun(runId, { pinAttemptedAt: new Date(), pinterestBoardId: boardId });
     const pinId = await createPin({
       imageUrl,
       link: listingUrl,
       title: pinCopy.title,
       description: pinCopy.description,
       altText: pinCopy.altText,
+      boardId,
     });
     await updatePipelineRun(runId, { pinterestPinId: pinId, status: 'done', attempts: 0 });
+
+    // 3) Geri okuma: pin gerçekten bu ilana ve bu panoya mı bağlı?
+    try {
+      const pin = await getPin(pinId);
+      if (!pin.link?.includes(`/listing/${listingId}`) || (pin.board_id && pin.board_id !== boardId)) {
+        await addWarning(
+          runId,
+          `Pin oluşturuldu ama geri okunan değerler beklenenden farklı (link: ${pin.link ?? '—'}, pano: ${pin.board_id ?? '—'}) — Pinterest'te kontrol edin.`,
+        );
+      }
+    } catch (e) {
+      await addWarning(runId, `Pin oluşturuldu (${pinId}) ama doğrulama için geri okunamadı: ${e instanceof Error ? e.message : e}`);
+    }
   } catch (err) {
     await fail(runId, err);
   }
 }
 
+/**
+ * Run'ı teknik hataya alır: mesaj + hatanın oluştuğu AŞAMA (o anki status) + SINIF
+ * (`lib/errors.classifyError`). Panel sınıfa göre kullanıcıya hangi düzeltmenin gerektiğini söyler.
+ */
 async function fail(runId: string, err: unknown): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
-  await updatePipelineRun(runId, { status: 'error', errorMessage: message });
+  const stage = (await getPipelineRun(runId).catch(() => null))?.status;
+  await updatePipelineRun(runId, {
+    status: 'error',
+    errorMessage: message,
+    errorStage: stage && stage !== 'error' ? stage : null,
+    errorKind: classifyError(err),
+  });
 }
 
 /**
@@ -591,11 +715,16 @@ async function addWarning(runId: string, message: string): Promise<void> {
   }
 }
 
-/** Reddedilen görsel için run'ı hata/iptal durumuna alır. */
+/**
+ * Kullanıcı reddi — `rejected` durumu. Teknik hata DEĞİLDİR (hata sayacına girmez, error_kind yok).
+ * Mesaj, tarihsel kayıtlarla (status='error' + aynı metin) tutarlı görünüm için korunur.
+ */
 export async function rejectRun(runId: string): Promise<void> {
   await updatePipelineRun(runId, {
-    status: 'error',
-    errorMessage: 'Görsel kullanıcı tarafından reddedildi.',
+    status: 'rejected',
+    errorMessage: REJECT_MESSAGE,
+    errorStage: null,
+    errorKind: null,
   });
 }
 

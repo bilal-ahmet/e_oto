@@ -12,7 +12,15 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { anthropic, CLAUDE_MODEL } from './client';
 import { buildDescriptionFor } from '@/lib/listing/description';
-import { cleanList, fixTitleCaps, sanitizeMaterial, sanitizeTag } from '@/lib/etsy/text-rules';
+import {
+  cleanList,
+  fixTitleCaps,
+  fixTitleSymbols,
+  isPhysicalMaterial,
+  sanitizeMaterial,
+  sanitizeTag,
+} from '@/lib/etsy/text-rules';
+import { productConfig } from '@/lib/product/config';
 import type { ProductType, SeoData } from '@/types';
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
@@ -38,7 +46,8 @@ const SYSTEM_PRINT = `You are an Etsy SEO expert for a digital wall-art / printa
 - perfectFor: 3-5 short style/room/occasion keywords (e.g. "Coastal & Nautical Decor", "Beach House Wall Art", "Housewarming Gift").
 - title capitalization: Etsy rejects titles where MORE THAN 3 words start with two capital letters (e.g. "JPG", "HD", "DIY" each count; "4K" does not). Use Title Case words otherwise.
 - tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Letters, numbers, spaces, hyphen and apostrophe only. No '#', no commas inside a tag.
-- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Printable art", "JPG file"). Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.`;
+- materials: EXACTLY 13 short terms that each TRUTHFULLY describe the delivered DIGITAL product — file type, delivery, color mode, resolution, aspect ratio or use (e.g. "Digital download", "JPG file", "300 DPI JPG", "5x7 ratio JPG", "RGB color"). The buyer receives ONLY digital JPG files: NEVER list physical materials or items that are not delivered (canvas, paper, ink, frame, wood, metal, glass, PDF…). Do not use materials as extra keyword slots. Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.
+- title characters: '%', ':', '&' and '+' may each appear AT MOST ONCE; no emoji.`;
 
 const SYSTEM_TV = `You are an Etsy SEO expert for a digital Frame TV / TV screen art shop (instant-download art for Samsung Frame TV and smart displays). The artwork is 16:9 landscape and is displayed ON a screen, NOT printed. Generate listing content in ENGLISH (Etsy's primary market). Rules:
 - title: compelling and keyword-rich, START with the main keyword, up to ~140 characters. Lead with Frame TV / TV art intent. Use " | " to separate keyword phrases (e.g. "Halloween Frame TV Art | Spooky Samsung Screen Wallpaper | Digital TV Art 4K Download").
@@ -46,7 +55,8 @@ const SYSTEM_TV = `You are an Etsy SEO expert for a digital Frame TV / TV screen
 - hook: 2-3 sentences, product-specific, START with the main keyword. Structure: what it is + scene description + style/colors + which decor style/season it suits + note it is an instant download. Make clear it is for SCREEN display (Samsung Frame TV / smart TVs), not a print. (This becomes the opening of the description.)
 - perfectFor: 3-5 short style/mood/occasion keywords (e.g. "Halloween Decor", "Frame TV Art Lovers", "Dark Academia Homes", "Spooky Season Ambiance").
 - tags: EXACTLY 13 tags, each a short phrase, each at most 20 characters. Prefer TV/screen keywords ("frame tv art", "samsung frame", "tv wallpaper", "digital tv art"). Letters, numbers, spaces, hyphen and apostrophe only. No '#', no commas inside a tag.
-- materials: EXACTLY 13 short material/keyword terms (e.g. "Digital download", "Frame TV art", "JPG file", "4K wallpaper"). Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.`;
+- materials: EXACTLY 13 short terms that each TRUTHFULLY describe the delivered DIGITAL product — file type, delivery, color mode, resolution, aspect ratio or use (e.g. "Digital download", "JPG file", "3840x2160 JPG", "16x9 image", "Frame TV art"). The buyer receives ONLY digital JPG files: NEVER list physical materials or items that are not delivered (canvas, paper, ink, frame, wood, metal, glass, PDF…). Do not use materials as extra keyword slots. Letters, numbers and spaces ONLY — no hyphens, colons, slashes, '&' or periods.
+- title characters: '%', ':', '&' and '+' may each appear AT MOST ONCE; no emoji.`;
 
 function systemFor(productType?: ProductType): string {
   return productType === 'tv' ? SYSTEM_TV : SYSTEM_PRINT;
@@ -69,6 +79,23 @@ function attributesInstruction(allowed?: Record<string, string[]>): string {
 - occasion: 1-2 fitting occasions, comma-separated, or "Everyday".
 - room: 2-4 suitable rooms, comma-separated (e.g. "Living room, Bedroom, Office").
 - subject: 1-3 subjects, comma-separated (e.g. "Abstract & geometric, Botanical").`;
+}
+
+/**
+ * Materyaller: temizlenir, fiziksel/teslim edilmeyen terimler atılır, 13'e ürün tipinin DOĞRU
+ * terim havuzundan (kullanılmamış olanlarla) tamamlanır — aynı terimi tekrarlayarak değil.
+ */
+function accurateMaterials(raw: string[], productType?: ProductType): string[] {
+  const kept = cleanList(raw, sanitizeMaterial).filter((m) => !isPhysicalMaterial(m));
+  const seen = new Set(kept.map((m) => m.toLowerCase()));
+  for (const m of productConfig(productType).materialPool) {
+    if (kept.length >= 13) break;
+    if (!seen.has(m.toLowerCase())) {
+      kept.push(m);
+      seen.add(m.toLowerCase());
+    }
+  }
+  return kept.slice(0, 13);
 }
 
 /** Tam olarak n eleman olacak şekilde diziyi kırpar/doldurur. */
@@ -130,12 +157,12 @@ export async function generateSeo(
   // Etsy metin kuralları prompt'a güvenilmeden burada da zorlanır (temizle+tekilleştir → 13'e tamamla),
   // böylece kullanıcı gate 2'de Etsy'nin kabul edeceği metni görür.
   return {
-    title: fixTitleCaps(parsed.title).slice(0, 140),
+    title: fixTitleCaps(fixTitleSymbols(parsed.title)).slice(0, 140),
     hook,
     perfectFor,
     tags: exactly(cleanList(parsed.tags, sanitizeTag), 13, 'wall art'),
     description: buildDescriptionFor(productType, hook, perfectFor),
-    materials: exactly(cleanList(parsed.materials, sanitizeMaterial), 13, 'Digital download'),
+    materials: accurateMaterials(parsed.materials, productType),
     categoryId: '', // yayında Digital Prints taksonomi id ile doldurulur
     attributes: {
       orientation: parsed.attributes.orientation.trim() || 'Vertical',

@@ -23,12 +23,16 @@ Zorlama `generateSeo`'nun dönüş nesnesinde uygulanır; Claude kaçırsa da Et
 | `hook` | 2-3 cümle açılış; açıklamanın ilk paragrafı olur | — (yalnızca prompt) |
 | `perfectFor` | 3-5 stil/mekân/vesile kelimesi | `exactly()` ile 3-5 aralığına kırpılır/doldurulur |
 | `tags` | **TAM 13**, her biri **≤20 karakter**; yalnızca harf/rakam/boşluk/`- ' ™ © ®` | `sanitizeTag` + tekilleştir → `exactly(..., 13)` |
-| `materials` | **TAM 13** kısa terim ("Digital download", "Printable art", "JPG file"); yalnızca harf/rakam/boşluk (Etsy `invalid_characters`) | `sanitizeMaterial` + tekilleştir → `exactly(..., 13)` |
+| `materials` | **TAM 13**, her biri teslim edilen **dijital** ürünü doğru tanımlar (dosya türü, teslim, renk modu, çözünürlük, oran); fiziksel malzeme (canvas, paper, ink, frame, PDF…) YASAK; yalnızca harf/rakam/boşluk (Etsy `invalid_characters`) | `sanitizeMaterial` + `isPhysicalMaterial` filtresi → `accurateMaterials`: eksik kalan ürün tipinin `productConfig().materialPool`'undan (kullanılmamışlarla) tamamlanır — aynı terim tekrarlanmaz |
 | `categoryId` | Üretimde BOŞ bırakılır | Yayında Digital Prints taksonomi id'siyle doldurulur |
 | `attributes` | Orientation/Style/Occasion/Room/Subject | Taksonomi eşlemesi Etsy tarafında |
 
 Etsy karakter/büyük harf kuralları `src/lib/etsy/text-rules.ts`'te tek yerde; `createDraftListing`
-`toEtsySafe` ile yayında tekrar uygular (gate 2 elle düzenleme için güvenlik ağı), `SeoEditor` uyarır.
+`toEtsySafe` ile yayında tekrar uygular (gate 2 elle düzenleme için güvenlik ağı).
+Başlıkta `% : & +` her biri **en fazla bir kez** (Etsy OAS); fazlası `fixTitleSymbols` ile çevrilir.
+**Düzeltilemeyen** ihlaller (başlık >140, >13 etiket/materyal, fiziksel materyal, AI beyanı eksik)
+`validateListingSeo` ile alan+sebep döner ve **onayı engeller**: `SeoEditor` butonu kapatır,
+`approve-seo` 422 döner, `publishToEtsy` Etsy'ye istek atmadan durur. Sessizce kırpma/üstüne yazma YOK.
 `exactly()` eksikse doldurur, fazlaysa keser. Bu sayıları değiştirirken hem prompt'u hem `exactly`
 çağrısını güncelle.
 
@@ -36,7 +40,9 @@ Etsy karakter/büyük harf kuralları `src/lib/etsy/text-rules.ts`'te tek yerde;
 
 Claude yalnızca **HOOK** ve **PERFECT FOR** üretir; gerisi koddan birleştirilir —
 `buildPrintDescription` / `buildTvDescription`, seçim `buildDescriptionFor` (`description.ts`).
-Boyut listesi `PRINT_RATIOS`'tan türetilir (`sizeLines`) — elle yazma.
+Boyut listesi `PRINT_RATIOS`'tan türetilir (`sizeLines`) — elle yazma. Dosya **adedi ve pikselleri**
+de `productConfig().files`'tan gelir (sabit "5 dosya / 4K" yazma); ekran dosyalarında DPI yazılmaz.
+**AI beyanı (`AI_DISCLOSURE_TEXT`) iki şablonda da "HOW THIS WAS MADE" altında zorunludur.**
 
 Sabit bölümler **ürün tipine göre farklıdır**, ortak olanları varsayma:
 
@@ -45,8 +51,7 @@ Sabit bölümler **ürün tipine göre farklıdır**, ortak olanları varsayma:
 | WHAT YOU'LL RECEIVE (5 dosya + 300 DPI + oran/alt boyut listesi) | WHAT YOU'LL RECEIVE (4K + Full HD) + "SCREEN USE ONLY" uyarısı |
 | HOW TO DOWNLOAD | HOW TO DOWNLOAD |
 | **HOW TO PRINT** | **HOW TO DISPLAY ON YOUR FRAME TV** (SmartThings adımları) |
-| — | **HOW THIS WAS MADE** (AI üretim beyanı) |
-| PLEASE NOTE · TERMS (© `ETSY_SHOP_NAME`) | PLEASE NOTE (all sales final) · TERMS |
+| PLEASE NOTE · **HOW THIS WAS MADE** (AI) · TERMS (© `ETSY_SHOP_NAME`) | PLEASE NOTE (all sales final) · **HOW THIS WAS MADE** (AI) · TERMS |
 
 Ürün tipi ayrıntısı: `.claude/skills/image-pipeline/SKILL.md`.
 

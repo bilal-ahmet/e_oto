@@ -6,13 +6,14 @@
  * raporlanır: sandbox token'ı production'da (ve tersi) geçersizdir, bu yüzden
  * PINTEREST_API_ENV değiştiğinde yeniden yetkilendirme gerekir.
  *
- * `probe=1` ile gerçek bir çağrı (GET /v5/user_account) yapıp token'ı doğrular.
+ * `probe=1` ile SALT OKUNUR gerçek bir çağrı (GET /v5/user_account) yapıp token'ı doğrular;
+ * sonuç `app_settings.pinterest_last_check`'e yazılır.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getOAuthTokenMeta, getSetting } from '@/lib/db/queries';
 import { apiEnv, isSandbox } from '@/lib/pinterest/hosts';
-import { pinterestFetch } from '@/lib/pinterest/client';
+import { runConnectionCheck } from '@/lib/connection/health';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,15 +53,6 @@ export async function GET(req: NextRequest) {
 
   if (req.nextUrl.searchParams.get('probe') !== '1') return NextResponse.json(base);
 
-  try {
-    const account = await pinterestFetch<{ username?: string }>('/user_account');
-    return NextResponse.json({ ...base, valid: true, username: account.username ?? null });
-  } catch (e) {
-    return NextResponse.json({
-      ...base,
-      valid: false,
-      reason: 'token_invalid',
-      message: e instanceof Error ? e.message : 'Pinterest çağrısı başarısız.',
-    });
-  }
+  const check = await runConnectionCheck('pinterest', 'panel');
+  return NextResponse.json({ ...base, valid: check.ok, check });
 }

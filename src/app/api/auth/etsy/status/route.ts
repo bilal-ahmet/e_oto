@@ -6,12 +6,13 @@
  * "Etsy'ye yayınla" dedikten SONRA öğreniyordu. Gate 2'deki taksonomi/öznitelik çağrısı da
  * hatayı sessizce yutuyordu. Bu uç, durumu önceden göstermek içindir.
  *
- * `probe=1` ile ayrıca Etsy'ye gerçek bir çağrı atıp mağazayı doğrular (token geçerli mi).
+ * `probe=1` ile ayrıca Etsy'ye SALT OKUNUR gerçek bir çağrı (`GET /users/me`) atar; sonuç
+ * `app_settings.etsy_last_check`'e yazılır ve panel kartında zamanıyla gösterilir.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getOAuthTokenMeta } from '@/lib/db/queries';
-import { getShopId } from '@/lib/etsy/listings';
+import { runConnectionCheck } from '@/lib/connection/health';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,15 +39,6 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('probe') !== '1') return NextResponse.json(base);
 
   // Gerçek çağrı: token süresi dolmuşsa refresh'i de tetikler, mağaza erişimini doğrular.
-  try {
-    const shopId = await getShopId();
-    return NextResponse.json({ ...base, valid: true, shopId });
-  } catch (e) {
-    return NextResponse.json({
-      ...base,
-      valid: false,
-      reason: 'token_invalid',
-      message: e instanceof Error ? e.message : 'Etsy çağrısı başarısız.',
-    });
-  }
+  const check = await runConnectionCheck('etsy', 'panel');
+  return NextResponse.json({ ...base, valid: check.ok, check });
 }

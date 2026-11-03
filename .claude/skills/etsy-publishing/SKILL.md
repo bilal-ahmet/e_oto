@@ -62,9 +62,28 @@ Kod: `src/lib/etsy/{client,oauth,listings}.ts` · Orkestrasyon: `publishToEtsy` 
    eder, sebep `publish_progress.warnings`'e yazılır ve gate 3 / "Yayınlandı" ekranında gösterilir.
 6. `uploadListingFile` → dijital JPG'ler (print 5, tv 2). Dosya adı **3-70 karakter**.
 
+0. (Ön koşul, listing yoksa) `validateListingSeo(toEtsySafe(seo))` boş olmalı ve en az 1 mockup
+   olmalı — değilse `AppError('validation')`, Etsy'ye **hiç istek gitmez**. Öznitelik yazılamazsa
+   yayın düşmez ama sebep `publish_progress.warnings`'e yazılır.
+
 **Listing AKTİVE EDİLMEZ.** Son adımdan sonra run `done` olur, listing Etsy'de **taslak** kalır;
-yayın kararı kullanıcınındır. `activateListing` kodda duruyor ama **hiçbir yerden çağrılmıyor** —
-Pinterest pin'inin otomatik zincirlenmemesinin sebebi de budur (taslağa pin = ölü link).
+yayın kararı kullanıcınındır (aktive eden yardımcı kodda yok). **Mevcut ilanlar güncellenmez** —
+PATCH/DELETE çağrısı yok; elle yapılan düzenlemeler geri yazılmaz.
+
+## İlan durumunu geri okuma (salt okunur)
+
+`getOwnListingState` → kimlikli `GET /listings/{id}` (`state`, `shop_id`); 404 → `not_found`,
+başka mağaza → `foreign_shop`, okuma hatası → `unknown`. Sonuç `pipeline_runs.etsy_listing_state`'e
+yazılır (`lib/pipeline/listing-state.ts`, `api/pipeline/etsy-state` sayfalı). Panelin "aktif"
+sayısı ve Pinterest ön koşulu YALNIZ buna dayanır. Etsy'nin "With an AI generator" üretim yöntemi
+alanı API şemasında yok (2026-11) — panelden elle seçilir; API'den destekleniyormuş gibi gösterme.
+
+## Hatalar
+
+`etsyFetch` 2xx dışında `ApiError {status, path, body, retryAfterSec}` fırlatır (mesaj formatı
+aynı); `classifyError` (`lib/errors.ts`) 400/422 → validation, 401/403 → auth, 429 → rate_limit,
+5xx/timeout → transient. 400 otomatik tekrar EDİLMEZ. Refresh `invalid_grant` →
+`app_settings.etsy_reauth_required`; doluyken refresh denenmez, OAuth callback temizler.
 
 `publishToEtsy` her adımdan sonra `publish_progress` checkpoint'i yazar; yarıda kalan yayın çift
 listing/çift upload üretmeden kaldığı yerden sürer. Yeni adım eklerken checkpoint'ini de ekle.

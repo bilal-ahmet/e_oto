@@ -6,7 +6,8 @@
  */
 
 import pThrottle from 'p-throttle';
-import { getOAuthToken, setSetting, upsertOAuthToken } from '@/lib/db/queries';
+import { getOAuthToken, getSetting, setSetting, upsertOAuthToken } from '@/lib/db/queries';
+import { ApiError, AppError, isInvalidGrant } from '@/lib/errors';
 import { TIMEOUTS, fetchWithTimeout } from '@/lib/async/timeout';
 import { singleFlight } from '@/lib/async/single-flight';
 import { refreshAccessToken } from './oauth';
@@ -39,6 +40,13 @@ async function persistTokens(
 
 const REFRESH_KEY = 'pinterest:refresh';
 
+function reauthError(): AppError {
+  return new AppError(
+    'auth',
+    "Pinterest yetkisi geçersiz (refresh token reddedildi) — panelden Pinterest'e yeniden bağlan.",
+  );
+}
+
 /**
  * Token'ı yeniler ve saklar; yeni access token'ı döner (refresh token yoksa null).
  * DAİMA `singleFlight(REFRESH_KEY, ...)` içinden çağrılır — bkz. lib/async/single-flight.
@@ -51,7 +59,18 @@ async function refreshAndStore(force = false): Promise<string | null> {
   if (!force && token.expiresAt != null && token.expiresAt.getTime() - Date.now() >= EXPIRY_BUFFER_MS) {
     return token.accessToken; // başkası zaten tazeledi
   }
-  const refreshed = await refreshAccessToken(token.refreshToken);
+  // Kalıcı red işaretliyse aynı ölü token'la tekrar tekrar deneme — yeniden yetkilendirme şart.
+  if (await getSetting('pinterest_reauth_required')) throw reauthError();
+  let refreshed;
+  try {
+    refreshed = await refreshAccessToken(token.refreshToken);
+  } catch (e) {
+    if (isInvalidGrant(e)) {
+      await setSetting('pinterest_reauth_required', new Date().toISOString());
+      throw reauthError();
+    }
+    throw e;
+  }
   await persistTokens(refreshed.accessToken, refreshed.refreshToken, token.refreshToken, refreshed.expiresAt);
   return refreshed.accessToken;
 }
@@ -65,7 +84,7 @@ async function refreshAndStore(force = false): Promise<string | null> {
 export async function getValidPinterestToken(): Promise<string> {
   const token = await getOAuthToken('pinterest');
   if (!token) {
-    throw new Error('Pinterest bağlantısı yok — önce /api/auth/pinterest/start ile yetkilendir.');
+    throw new AppError('auth', 'Pinterest bağlantısı yok — önce /api/auth/pinterest/start ile yetkilendir.');
   }
 
   const expiringSoon =
@@ -73,7 +92,7 @@ export async function getValidPinterestToken(): Promise<string> {
 
   if (expiringSoon && token.refreshToken) {
     const access = await singleFlight(REFRESH_KEY, refreshAndStore);
-    if (!access) throw new Error('Pinterest refresh token yok — yeniden yetkilendirme gerekiyor.');
+    if (!access) throw new AppError('auth', 'Pinterest refresh token yok — yeniden yetkilendirme gerekiyor.');
     return access;
   }
 
@@ -127,7 +146,15 @@ export async function pinterestFetch<T = unknown>(path: string, opts: PinterestF
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Pinterest API hatası ${res.status} (${path}, ortam: ${apiEnv()}): ${text}`);
+    const ra = Number(res.headers.get('retry-after'));
+    throw new ApiError(
+      'pinterest',
+      res.status,
+      path,
+      text,
+      `Pinterest API hatası ${res.status} (${path}, ortam: ${apiEnv()}): ${text}`,
+      Number.isFinite(ra) && ra > 0 ? ra : undefined,
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

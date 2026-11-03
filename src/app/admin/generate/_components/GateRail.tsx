@@ -16,7 +16,7 @@ import { STAGES, stageIndexFor } from './shared';
  */
 export function Stepper({ status }: { status: PipelineStatus | 'idle' }) {
   const current = stageIndexFor(status);
-  const errored = status === 'error';
+  const errored = status === 'error' || status === 'rejected';
 
   return (
     <div className="rounded-lg border border-sand bg-sheet shadow-card">

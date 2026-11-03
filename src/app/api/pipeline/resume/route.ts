@@ -15,6 +15,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPipelineRun, updatePipelineRun } from '@/lib/db/queries';
+import { displayStatus } from '@/lib/status';
 import type { PipelineStatus } from '@/types';
 
 export async function POST(req: NextRequest) {
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest) {
 
   const run = await getPipelineRun(id);
   if (!run) return NextResponse.json({ error: 'Run bulunamadı.' }, { status: 404 });
-  if (run.status !== 'error') {
+  // Kullanıcı reddi (tarihsel 'error' + red mesajı dahil) teknik hata değildir — sürdürülmez.
+  if (run.status !== 'error' || displayStatus(run) === 'rejected') {
     return NextResponse.json(
       { error: `Yalnızca hata almış run'lar sürdürülebilir (durum: ${run.status}).` },
       { status: 409 },
@@ -42,7 +44,14 @@ export async function POST(req: NextRequest) {
   const hasFiles = Boolean(run.digitalFileUrls && Object.keys(run.digitalFileUrls).length > 0);
 
   let status: PipelineStatus;
-  if (run.seo && hasFiles && hasMedia) {
+  if (run.etsyListingId && run.errorStage === 'publishing_pinterest') {
+    status = 'done'; // Etsy tamam, yalnız pin düştü — pin, "tamamlandı" ekranından yeniden denenir
+  } else if (run.seo && !run.etsyListingId && run.errorKind === 'validation' && run.errorStage === 'publishing_etsy') {
+    // İçerik düzeltmesi gerekiyor (ör. AI beyanı eksik, fiziksel materyal) ve gate 3'te SEO
+    // düzenlenemiyor → SEO kapısına dön. Yeniden onayda işleme adımı mevcut master/dosya/mockup/
+    // videoyu ATLAR (idempotent) — ek üretim maliyeti yok.
+    status = 'awaiting_seo_approval';
+  } else if (run.seo && hasFiles && hasMedia) {
     status = 'awaiting_publish'; // kapı 3: medya + dosyalar hazır, yalnızca yayın kaldı
   } else if (run.seo) {
     status = 'awaiting_seo_approval'; // kapı 2: SEO var, işleme yeniden çalıştırılabilir

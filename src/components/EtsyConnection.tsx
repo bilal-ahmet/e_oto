@@ -8,12 +8,12 @@
  */
 
 import { Alert, LinkButton } from '@/components/ui';
+import { ConnectionHealthLine } from '@/components/ConnectionHealthLine';
+import { connectionHealth } from '@/lib/connection/health';
 import { getOAuthTokenMeta } from '@/lib/db/queries';
+import { formatTr } from '@/lib/format';
 
-function fmt(d: Date | null): string {
-  if (!d) return '—';
-  return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+const fmt = (d: Date | null) => formatTr(d, { year: true });
 
 /** Etsy refresh token'ı ~90 gün geçerlidir; bu süre dolarsa yeniden yetkilendirme şart. */
 const REFRESH_TOKEN_DAYS = 90;
@@ -23,11 +23,11 @@ const REFRESH_TOKEN_DAYS = 90;
  * derleyicisi render gövdesinde saf olmayan çağrılara izin vermiyor.
  */
 async function loadStatus() {
-  const meta = await getOAuthTokenMeta('etsy');
+  const [meta, health] = await Promise.all([getOAuthTokenMeta('etsy'), connectionHealth('etsy')]);
   // Refresh token'ın ömrü son yetkilendirmeden itibaren sayılır (her refresh'te tazelenir).
   const since = meta.updatedAt ? Date.now() - meta.updatedAt.getTime() : 0;
   const daysLeft = Math.max(REFRESH_TOKEN_DAYS - Math.floor(since / 86_400_000), 0);
-  return { ...meta, daysLeft, expiringSoon: meta.connected && daysLeft <= 14 };
+  return { ...meta, health, daysLeft, expiringSoon: meta.connected && daysLeft <= 14 };
 }
 
 export async function EtsyConnection({ callbackResult }: { callbackResult?: { status?: string; reason?: string } }) {
@@ -58,18 +58,22 @@ export async function EtsyConnection({ callbackResult }: { callbackResult?: { st
     );
   }
 
+  const bad = ['reauth_required', 'auth_error'].includes(meta.health.state);
   return (
     <Alert
-      tone={meta.expiringSoon ? 'warning' : 'info'}
-      title="Etsy bağlı"
+      tone={bad ? 'danger' : meta.expiringSoon || meta.health.state === 'transient' ? 'warning' : 'info'}
+      title="Etsy hesabı"
       action={connectButton}
       className="mb-6"
     >
+      {/* "Erişim anahtarı" Etsy'de 1 saat geçerlidir ve her çağrıda otomatik yenilenir — geçmiş
+          bir saat görünmesi ARIZA DEĞİLDİR. Asıl ömür refresh token'ındır (~90 gün, aşağıda). */}
       <p className="text-sm">
-        <span className="mr-2 inline-block size-1.5 rounded-full bg-state-done-ink align-middle" aria-hidden />
-        Son yetkilendirme: {fmt(meta.updatedAt)} · Geçerlilik: {fmt(meta.expiresAt)}
+        Son yetkilendirme/yenileme: {fmt(meta.updatedAt)} · Erişim anahtarı (≈1 sa, otomatik
+        yenilenir): {fmt(meta.expiresAt)} · Yenileme anahtarı: ~{meta.daysLeft} gün
         {callbackResult?.status === 'connected' ? ' · yetkilendirme tamamlandı' : ''}
       </p>
+      <ConnectionHealthLine provider="etsy" health={meta.health} />
       {meta.hasRefreshToken ? null : (
         <p className="mt-1">Yenileme anahtarı YOK — süre dolunca yeniden bağlanmalısınız.</p>
       )}

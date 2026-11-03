@@ -1,18 +1,21 @@
 /**
  * POST /api/pipeline/reject
  * Body: { id: string }
- * Run'ı iptal/hata durumuna alır (kullanıcı görseli/akışı reddetti).
+ * Run'ı `rejected` durumuna alır (kullanıcı görseli/akışı reddetti — teknik hata DEĞİL).
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPipelineRun } from '@/lib/db/queries';
+import { displayStatus } from '@/lib/status';
 import { isRunActive, rejectRun } from '@/lib/pipeline/run';
 import type { PipelineStatus } from '@/types';
 
 /**
- * Reddin GEÇERLİ olduğu durumlar: insan-onayı kapıları + zaten bitmiş run'lar.
+ * Reddin GEÇERLİ olduğu durumlar: insan-onayı kapıları + teknik hatada kalmış run'lar.
+ * `done` YOK: o run'ın Etsy'de taslağı var; reddetmek kaydın üstüne yazıp Etsy'deki taslağı
+ * panelden görünmez kılıyordu. (Etsy listing'i olan hiçbir run reddedilemez — aşağıda.)
  *
- * NEDEN LİSTE VAR: `rejectRun` yalnızca `status='error'` yazar, çalışan adımı DURDURAMAZ.
+ * NEDEN LİSTE VAR: `rejectRun` yalnızca durumu yazar, çalışan adımı DURDURAMAZ.
  * `processing_files` gibi bir adımın ortasında çağrılırsa arka plan işi para harcamaya devam
  * eder ve bittiğinde `awaiting_publish` yazıp reddi SESSİZCE GERİ ALIR. Arayüz bu butonu
  * zaten yalnızca kapılarda gösteriyor; uç da aynı kuralı uygulasın.
@@ -22,7 +25,6 @@ const REJECTABLE: PipelineStatus[] = [
   'awaiting_approval',
   'awaiting_seo_approval',
   'awaiting_publish',
-  'done',
   'error',
 ];
 
@@ -39,6 +41,18 @@ export async function POST(req: NextRequest) {
   const run = await getPipelineRun(body.id);
   if (!run) return NextResponse.json({ error: 'Run bulunamadı.' }, { status: 404 });
 
+  if (run.etsyListingId) {
+    return NextResponse.json(
+      {
+        error:
+          `Bu run'ın Etsy'de bir ilanı var (#${run.etsyListingId}) — reddedilemez. ` +
+          'İlanı kaldırmak istiyorsanız Etsy panelinden yapın.',
+      },
+      { status: 409 },
+    );
+  }
+  if (displayStatus(run) === 'rejected') return NextResponse.json({ ok: true, status: 'rejected' });
+
   if (!REJECTABLE.includes(run.status) || isRunActive(body.id)) {
     return NextResponse.json(
       {
@@ -51,5 +65,5 @@ export async function POST(req: NextRequest) {
   }
 
   await rejectRun(body.id);
-  return NextResponse.json({ ok: true, status: 'error' });
+  return NextResponse.json({ ok: true, status: 'rejected' });
 }

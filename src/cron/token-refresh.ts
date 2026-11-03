@@ -19,6 +19,7 @@ import cron from 'node-cron';
 import { getOAuthTokenMeta, withAdvisoryLock } from '@/lib/db/queries';
 import { refreshEtsyTokenNow } from '@/lib/etsy/client';
 import { refreshPinterestTokenNow } from '@/lib/pinterest/client';
+import { runConnectionCheck } from '@/lib/connection/health';
 
 let registered = false;
 const LOCK_KEY = 728_403; // recovery (728401) ve rakip tarama (728402) ile çakışmaz
@@ -75,8 +76,15 @@ async function keepAlive(): Promise<void> {
         } catch (e) {
           // Bir sağlayıcının refresh token'ı gerçekten öldüyse burada patlar; DİĞERİNİ
           // etkilememesi için hata sağlayıcı bazında yakalanır. Kullanıcı panelde ilgili
-          // "bağlı değil" uyarısını görür ve tek tıkla yeniden yetkilendirir.
+          // "yeniden yetkilendirme gerekiyor" durumunu görür ve tek tıkla yeniden yetkilendirir.
           console.error(`[cron] ${p.label} token tazelenemedi:`, e instanceof Error ? e.message : e);
+        }
+        // Günlük salt okunur kontrol: panelde "son başarılı kontrol" bilgisi tazelensin.
+        // Tazeleme başarısız olsa da çalışır — sonucu (ör. yetki hatası) panelde görünür olur.
+        try {
+          if ((await getOAuthTokenMeta(p.name)).connected) await runConnectionCheck(p.name, 'cron');
+        } catch (e) {
+          console.error(`[cron] ${p.label} bağlantı kontrolü yazılamadı:`, e instanceof Error ? e.message : e);
         }
       }
     });

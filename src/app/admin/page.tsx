@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Card, EmptyState, LinkButton, PageHeader, SectionHeading } from '@/components/ui';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ClearRunsButton } from '@/components/ClearRunsButton';
+import { EtsyStateCheckButton } from '@/components/EtsyStateCheckButton';
 import { EtsyConnection } from '@/components/EtsyConnection';
 import { PinterestConnection } from '@/components/PinterestConnection';
 import {
@@ -10,7 +11,8 @@ import {
   listPipelineRuns,
   pipelineRunStatusCounts,
 } from '@/lib/db/queries';
-import { STATUS_META } from '@/lib/status';
+import { ERROR_KIND_META, STATUS_META, displayStatus, listingStateLabel } from '@/lib/status';
+import { formatTr } from '@/lib/format';
 
 // Her istekte taze veri (DB'den).
 export const dynamic = 'force-dynamic';
@@ -41,14 +43,7 @@ function pageNumbers(current: number, count: number): (number | 'gap')[] {
   return out;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const formatDate = (iso: string) => formatTr(iso);
 
 export default async function DashboardPage({
   searchParams,
@@ -91,11 +86,20 @@ export default async function DashboardPage({
   const shopName = (id: number) => shops.find((s) => s.shopId === id)?.shopName ?? `#${id}`;
   const topCompetitors = listings; // SQL zaten skora göre sıralı ve 5'le sınırlı
 
-  const stats = [
-    { label: 'Toplam çalıştırma', value: total },
+  // `done` = Etsy'ye TASLAK olarak aktarıldı. "Aktif" yalnız Etsy'den geri okunup doğrulananlardır;
+  // hiç okunmamış ya da okuması başarısız olanlar ayrı sayılır (eski bilgi güncel gibi sunulmaz).
+  const doneKeys = Object.keys(counts).filter((k) => k.startsWith('done:'));
+  const activeVerified = n('done:active');
+  const unverified = n('done:unchecked') + n('done:unknown');
+  const notActive = doneKeys.reduce((sum, k) => sum + counts[k], 0) - activeVerified - unverified;
+
+  const stats: { label: string; value: number; hint?: string }[] = [
     { label: 'Onay bekleyen', value: awaiting },
-    { label: 'Yayınlanan', value: n('done') },
-    { label: 'Hatalı', value: n('error') },
+    { label: 'Etsy’de aktif (doğrulandı)', value: activeVerified },
+    { label: 'Etsy’de aktif değil', value: notActive, hint: 'taslak / pasif / bulunamadı' },
+    { label: 'Etsy durumu doğrulanmadı', value: unverified, hint: 'kontrol edilmedi ya da okunamadı' },
+    { label: 'Teknik hata', value: n('error') },
+    { label: 'Reddedildi', value: n('rejected'), hint: 'kullanıcı kararı' },
   ];
 
   return (
@@ -113,20 +117,28 @@ export default async function DashboardPage({
       {/* Sayaçlar tek bir "defter şeridi": dört ayrı kart yerine bölünmüş tek levha —
           bunlar bağımsız kartlar değil, aynı tablonun sütunları. */}
       <Card padded={false}>
-        <dl className="grid grid-cols-2 divide-sand md:grid-cols-4 md:divide-x">
+        <dl className="grid grid-cols-2 divide-sand md:grid-cols-3 lg:grid-cols-6 lg:divide-x">
           {stats.map((s, i) => (
             <div
               key={s.label}
-              className={`px-5 py-4 ${i < 2 ? 'border-b border-sand md:border-b-0' : ''}`}
+              className={`px-5 py-4 ${i < 4 ? 'border-b border-sand lg:border-b-0' : ''}`}
             >
               <dt className="text-sm font-medium text-ink-muted">
                 {s.label}
               </dt>
               <dd className="mt-1 font-display text-4xl tabular-nums text-ink">{s.value}</dd>
+              {s.hint ? <dd className="mt-0.5 text-xs text-ink-faint">{s.hint}</dd> : null}
             </div>
           ))}
         </dl>
       </Card>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-ink-muted">
+          Toplam {total} çalıştırma. Hat ilanları Etsy’ye <strong>taslak</strong> olarak aktarır; aktif
+          sayısı yalnız Etsy’den salt okunur geri okunan durumdur.
+        </p>
+        <EtsyStateCheckButton />
+      </div>
 
       <div className="mt-10 grid gap-8 md:grid-cols-2 lg:grid-cols-5">
         <section className="lg:col-span-3">
@@ -146,14 +158,31 @@ export default async function DashboardPage({
               <>
                 <ul className="divide-y divide-sand-soft">
                   {runs.map((run) => {
-                    const meta = STATUS_META[run.status];
+                    // Tarihsel red kayıtları (status='error' + red mesajı) 'rejected' görünür.
+                    const shown = displayStatus(run);
+                    const meta = STATUS_META[shown];
                     // Hata durumunda jenerik açıklama yerine gerçek sebebi göster — asıl bilgi odur.
                     const note =
-                      run.status === 'error' && run.errorMessage ? run.errorMessage : meta.description;
+                      shown === 'error' && run.errorMessage
+                        ? run.errorMessage
+                        : shown === 'done'
+                          ? `${listingStateLabel(run.etsyListingState)}${
+                              run.etsyStateCheckedAt ? ` (kontrol: ${formatTr(run.etsyStateCheckedAt)})` : ''
+                            } · #${run.etsyListingId}${run.pinterestPinId ? ' · Pin ✓' : ''}`
+                          : meta.description;
+                    const errorInfo =
+                      shown === 'error'
+                        ? [
+                            run.errorKind ? ERROR_KIND_META[run.errorKind].label : null,
+                            run.errorStage ? `aşama: ${STATUS_META[run.errorStage]?.label ?? run.errorStage}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')
+                        : '';
                     // Not rengi durum SINIFINDAN türetilir (elle üçleme değil) — sıra
                     // sendeyse altın, hata kırmızı, gerisi sakin.
                     const noteClass =
-                      run.status === 'error'
+                      shown === 'error'
                         ? 'text-state-error-ink'
                         : meta.kind === 'waiting'
                           ? 'text-state-turn-ink'
@@ -163,9 +192,15 @@ export default async function DashboardPage({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-ink">{run.prompt}</p>
                           <p className={`mt-1 text-xs ${noteClass}`}>{note}</p>
+                          {errorInfo ? (
+                            <p className="mt-0.5 text-xs text-ink-muted">
+                              {errorInfo}
+                              {run.errorKind ? ` — ${ERROR_KIND_META[run.errorKind].hint}` : ''}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="shrink-0 text-right">
-                          <StatusBadge status={run.status} />
+                          <StatusBadge status={shown} />
                           <p className="mt-1.5 font-mono text-label tabular-nums text-ink-faint">
                             {formatDate(run.updatedAt)} · {run.id.slice(0, 8)}
                           </p>

@@ -8,6 +8,7 @@ import { Button, Card, FRAMED_IMG, Field, Framed, Input, SectionHeading, Spinner
 import { mockupAspectClass, fileLabel, filesSummary } from './shared';
 import { PipelineWarnings } from './PipelineWarnings';
 import { SeoSummary } from './SeoSummary';
+import { toEtsySafe, validateListingSeo } from '@/lib/etsy/text-rules';
 
 export function PublishReview({
   run,
@@ -16,6 +17,7 @@ export function PublishReview({
   onPublish,
   onRegenerate,
   onReject,
+  onBackToSeo,
 }: {
   run: PipelineRun;
   busy: boolean;
@@ -23,12 +25,17 @@ export function PublishReview({
   onPublish: (price: number, thumbnailIndex: number) => void;
   onRegenerate: (index: number) => void;
   onReject: () => void;
+  /** Gate 3 → gate 2: metin düzeltmesi için (üretilmiş medya/dosyalar korunur). */
+  onBackToSeo: () => void;
 }) {
   const [price, setPrice] = useState(() => defaultPrice(run.productType));
   const files = run.digitalFileUrls ? Object.entries(run.digitalFileUrls) : [];
   const mockups = run.mediaUrls?.mockups ?? [];
   const filledMockups = mockups.filter(Boolean).length;
   const imageCount = filledMockups + (run.mediaUrls?.sizeGuide ? 1 : 0);
+  // Sunucu (publishToEtsy) aynı kuralları Etsy'ye istek atmadan uygular; burada önceden gösterilir.
+  const seoIssues = run.seo ? validateListingSeo(toEtsySafe(run.seo)) : [];
+  const blocked = filledMockups === 0 || seoIssues.length > 0;
 
   // Thumbnail = ilk dolu mockup (varsayılan). Kullanıcı değiştirebilir.
   const firstFilled = mockups.findIndex(Boolean);
@@ -71,7 +78,7 @@ export function PublishReview({
           <div className="flex flex-wrap items-center gap-3">
             <Button
               onClick={() => onPublish(price, thumbnailIndex)}
-              disabled={busy || imageCount === 0 || regenIndex !== null}
+              disabled={busy || blocked || regenIndex !== null}
             >
               {busy ? <Spinner /> : null}
               Etsy&apos;ye yayınla
@@ -88,10 +95,27 @@ export function PublishReview({
         </p>
 
         {/* Engelleyici uyarı butonun 300px altında değil, kararın YANINDA. */}
-        {imageCount === 0 ? (
+        {filledMockups === 0 ? (
           <p className="mt-2 text-sm font-medium text-state-error-ink">
-            Etsy en az 1 görsel ister. fal kredisi gelince mockup üret ya da ölçü görseli ekle.
+            En az 1 mockup gerekli — ilan eseri göstermeli (yalnız ölçü görseliyle yayınlanmaz). fal
+            kredisi gelince mockup üret.
           </p>
+        ) : null}
+        {seoIssues.length > 0 ? (
+          <div className="mt-2 text-sm font-medium text-state-error-ink">
+            <p>Metinler Etsy kurallarına uymuyor — bu hâliyle Etsy&apos;ye gönderilmez:</p>
+            <ul className="mt-1 space-y-0.5">
+              {seoIssues.map((i, k) => (
+                <li key={k}>• [{i.field}] {i.message}</li>
+              ))}
+            </ul>
+            <Button variant="secondary" size="sm" className="mt-2" onClick={onBackToSeo} disabled={busy}>
+              Metinlere dön ve düzelt
+            </Button>
+            <p className="mt-1 font-normal text-ink-muted">
+              Dosyalar, mockup&apos;lar ve video korunur; metin onayından sonra yeniden üretilmez.
+            </p>
+          </div>
         ) : null}
       </div>
 

@@ -53,9 +53,9 @@ sanıp `Unexpected token '<'` verir. Bütçe proxy sınırının altında kalmal
 
 Kural: upstream hatası için **424** (`UPSTREAM_FAILED`); DO/Cloudflare origin'in 502/504'ünü kendi
 HTML sayfasıyla değiştirir, JSON gövdemiz kaybolur (teşhis: `x-do-orig-status` gerçek kodu taşır).
-Kuralı uygulayan tek Pinterest route'u `api/auth/pinterest/boards` — diğerleri upstream'i senkron
-beklemiyor (`publish-pinterest` 202 fire-and-forget, `pin-copy` fallback'le 200). Yeni senkron
-route eklersen 424 kullan.
+Kuralı uygulayan route'lar `api/auth/pinterest/boards` ve `publish-pinterest` (Etsy durum ön
+kontrolü okunamazsa 424; pin'in kendisi 202 fire-and-forget). `pin-copy` fallback'le 200.
+Yeni senkron route eklersen 424 kullan.
 
 ## Pin
 
@@ -64,6 +64,18 @@ mockup'ın public Spaces URL'i (`thumbnailIndex`, yoksa ilk dolu slot; re-upload
 Claude'dan, board `app_settings`'ten. Yazma limiti ~100 req/dk (throttle payıyla 90).
 **Pin otomatik zincirlenmez:** Etsy listing'i bilerek taslak bırakıldığı için kullanıcı listing'i
 Etsy panelinden aktive ettikten sonra `DoneView`'dan elle tetikler — taslağa pin ölü link üretir.
+
+**Pin güvenceleri (`publishToPinterest`):**
+- Ön koşul **sunucuda** doğrulanır: ilan Etsy'den salt okunur okunur (`refreshListingState`);
+  `active` değilse (taslak/pasif/bulunamadı/başka mağaza/okunamadı) pin ATILMAZ — route 409/424
+  döner, run `error`'a düşmez. Fail-closed.
+- Pano pin başına seçilebilir (`boardId`); `app_settings.pinterest_board_id` varsayılanı DEĞİŞMEZ.
+  Kullanılan pano `pipeline_runs.pinterest_board_id`'ye yazılır.
+- **Çift pin önleme:** `POST /pins` öncesi `pin_attempted_at` yazılır. İşaret var + pin id yoksa
+  (zaman aşımı/çökme) yeni pin atılmadan `findPinForListing` panoda `/listing/{id}` linkli pin arar;
+  bulunursa benimsenir, bulunamazsa kullanıcıya bırakılır (`force: true` = bilinçli tekrar).
+  Pinterest'in idempotency'si varsayılmaz; kurtarma sweeper'ı da kör tekrar yapmaz.
+- Pin sonrası `getPin` ile link/pano geri okunur; uyuşmazlık uyarı olur.
 
 **Pin metni:** `generatePinCopy` (`src/lib/claude/pin-copy.ts`) Etsy SEO'sundan başlık (≤100) +
 açıklama (≤500) + alt metin üretir; kullanıcı `DoneView`'daki kapıda düzenleyip onaylar

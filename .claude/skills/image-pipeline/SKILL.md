@@ -57,6 +57,12 @@ Bu adım canlıda OOM'a ve bitmeyen run döngüsüne yol açmıştı; nedenler *
 - Print'teki q90/4:2:0 **ölçülmüş bellek sözleşmesinin parçası** (77 MP dosyalar) — yükseltmeden
   önce 1. ve 3. maddeleri oku. TV dosyaları 8.3 MP olduğu için kalite yukarı çekilebildi.
 - Her JPG <20 MB; aşarsa kalite %5'er düşer, zemin %60 (`resize-and-export.ts`). ZIP YOK.
+- **Her dosya üretildiği anda doğrulanır** (`packaging/validate.ts` `PackageValidator`): piksel
+  boyutu spec'le birebir (oran addan değil pikselden), JPEG, ≤20 MB, SHA-256 tekil; sonunda adet/
+  anahtar kümesi spec'le aynı (`assertFileKeys`, resume'da da). İhlal → `AppError('validation')`,
+  run durur. `metadata()` yalnız başlık okur — bellek sözleşmesini bozmaz; buffer biriktirme.
+- Upscale pass-through'a düşerse ya da master hedeften küçükse sebep **run uyarısına** yazılır
+  (gate 3'te görünür) — yalnız `console.warn` yetmez.
 
 ## Medya üretimi
 

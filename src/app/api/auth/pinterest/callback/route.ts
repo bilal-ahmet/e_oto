@@ -5,7 +5,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { exchangeCode } from '@/lib/pinterest/oauth';
 import { apiEnv } from '@/lib/pinterest/hosts';
-import { getSetting, setSetting, upsertOAuthToken } from '@/lib/db/queries';
+import { deleteSetting, getSetting, setSetting, upsertOAuthToken } from '@/lib/db/queries';
 import { env } from '@/lib/env';
 
 export async function GET(req: NextRequest) {
@@ -31,6 +31,9 @@ export async function GET(req: NextRequest) {
     const previousEnv = await getSetting('pinterest_token_env');
 
     await upsertOAuthToken('pinterest', tokens.accessToken, tokens.refreshToken ?? null, tokens.expiresAt);
+    // Yeni yetki: eski "refresh reddedildi" işareti ve son kontrol sonucu artık geçersiz.
+    await deleteSetting('pinterest_reauth_required');
+    await deleteSetting('pinterest_last_check');
     // Token'ın hangi ortama ait olduğunu işaretle — sandbox token'ı production'da (ve tersi)
     // geçersizdir; kart bu uyuşmazlığı gösterip yeniden yetkilendirmeye yönlendirir.
     await setSetting('pinterest_token_env', apiEnv());

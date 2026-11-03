@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "tsx scripts/migrate.ts",
-    "auth:hash": "tsx scripts/hash-password.ts"
+    "auth:hash": "tsx scripts/hash-password.ts",
+    "check:rules": "tsx scripts/check-rules.ts",
+    "etsy:snapshot": "tsx scripts/snapshot-listings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

@@ -12,7 +12,24 @@ export type PipelineStatus =
   | 'publishing_etsy'
   | 'publishing_pinterest'
   | 'done'
+  | 'rejected' // kullanıcı görseli/run'ı reddetti — teknik hata DEĞİL, hata sayacına girmez
   | 'error';
+
+/**
+ * Teknik hatanın sınıfı — kullanıcıya hangi düzeltmenin gerektiğini söyler (`lib/pipeline/errors.ts`).
+ * validation: içerik/dosya düzeltmesi gerekir (Etsy 400/422, ön-doğrulama ihlali) — aynı içerikle tekrar deneme işe yaramaz.
+ * auth: yeniden yetkilendirme gerekir (401/403, refresh reddi).
+ * rate_limit: 429 — bir süre sonra tekrar denenir.
+ * transient: geçici servis/ağ hatası, zaman aşımı — tekrar denenebilir.
+ * internal: uygulama içi beklenmeyen hata.
+ */
+export type ErrorKind = 'validation' | 'auth' | 'rate_limit' | 'transient' | 'internal';
+
+/**
+ * Etsy'den salt okunur geri okunan ilan durumu. Etsy'nin kendi değerleri (`active`, `draft`,
+ * `inactive`, `sold_out`, `expired`, `edit`, ...) aynen saklanır; okunamadıysa `unknown`.
+ */
+export type EtsyListingState = string;
 
 /** Görsel üretim modeli — UI'da seçilir, ilgili API'ye istek atılır. */
 export type ImageModel = 'imagen' | 'flux';
@@ -44,7 +61,7 @@ export const PRINT_RATIOS = [
     subSizes: ['11x14', '22x28'] },
   { key: 'ratio_5x7', label: '5:7', fileName: 'ratio-5x7-25x35.jpg', width: 7500, height: 10500,
     subSizes: ['5x7', '10x14', '15x21', '20x28', '25x35'],
-    isoNote: 'A1–A5 with ~1% trim' },
+    isoNote: 'A1–A5 with ~1% trim or a thin white border' },
 ] as const satisfies readonly {
   key: string; label: string; fileName: string; width: number; height: number;
   subSizes: readonly string[]; isoNote?: string;
@@ -137,6 +154,12 @@ export interface PipelineRun {
   attempts?: number; // kurtarma sweeper'ının bu run'ı kaç kez yeniden denediği
   publishProgress?: PublishProgress; // publishing_etsy resume checkpoint'i
   errorMessage?: string;
+  errorStage?: PipelineStatus; // hata anında run'ın bulunduğu aşama
+  errorKind?: ErrorKind;
+  etsyListingState?: EtsyListingState; // Etsy'den son okunan durum (yoksa hiç kontrol edilmedi)
+  etsyStateCheckedAt?: string; // ISO 8601 — son okuma denemesi
+  pinterestBoardId?: string; // pin'in atıldığı pano
+  pinAttemptedAt?: string; // ISO 8601 — POST /pins denemesi başladı (sonuç belirsizse mutabakat)
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }

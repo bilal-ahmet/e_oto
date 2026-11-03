@@ -12,10 +12,14 @@ import { TIMEOUTS } from '@/lib/async/timeout';
 
 const MODEL = 'fal-ai/clarity-upscaler';
 
-export async function upscale(buffer: Buffer): Promise<Buffer> {
+/**
+ * @returns `fallback` doluysa upscale YAPILMADI (pass-through) ve sebebi — çağıran bunu run uyarısına
+ * yazar; eskiden yalnız sunucu loguna düşüyordu ve dosyaların gerçek detayı bilinmiyordu.
+ */
+export async function upscale(buffer: Buffer): Promise<{ buffer: Buffer; fallback?: string }> {
   if (!hasFal()) {
     console.warn('[upscale] FAL_KEY yok — pass-through (ham görsel master kabul edildi).');
-    return buffer;
+    return { buffer, fallback: 'FAL_KEY tanımlı değil' };
   }
   try {
     const imageUrl = await uploadBuffer(buffer, 'image/png', 'master-source.png');
@@ -32,10 +36,10 @@ export async function upscale(buffer: Buffer): Promise<Buffer> {
     const url = out.image?.url ?? out.images?.[0]?.url;
     if (!url) throw new Error('clarity-upscaler görsel döndürmedi.');
     const { buffer: upscaled } = await downloadImage(url);
-    return upscaled;
+    return { buffer: upscaled };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[upscale] clarity-upscaler başarısız (${msg}) — pass-through'a düşülüyor.`);
-    return buffer;
+    return { buffer, fallback: `clarity-upscaler başarısız: ${msg.slice(0, 200)}` };
   }
 }

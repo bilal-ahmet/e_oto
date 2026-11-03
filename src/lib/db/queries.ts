@@ -22,11 +22,13 @@ import {
   type PipelineRunRow,
 } from './schema';
 import { decrypt, encrypt } from './crypto';
+import { REJECT_MESSAGE } from '@/lib/status';
 import type {
   CompetitorListing,
   CompetitorResearch,
   CompetitorShop,
   DigitalFileUrls,
+  ErrorKind,
   ImageDraft,
   ImageModel,
   MediaUrls,
@@ -63,6 +65,12 @@ function rowToPipelineRun(row: PipelineRunRow): PipelineRun {
     attempts: row.attempts ?? 0,
     publishProgress: (row.publishProgress as PublishProgress) ?? undefined,
     errorMessage: row.errorMessage ?? undefined,
+    errorStage: (row.errorStage as PipelineStatus) ?? undefined,
+    errorKind: (row.errorKind as ErrorKind) ?? undefined,
+    etsyListingState: row.etsyListingState ?? undefined,
+    etsyStateCheckedAt: row.etsyStateCheckedAt?.toISOString(),
+    pinterestBoardId: row.pinterestBoardId ?? undefined,
+    pinAttemptedAt: row.pinAttemptedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -191,7 +199,16 @@ export async function getOAuthToken(provider: 'etsy' | 'pinterest'): Promise<{
  * Panelden değiştirilebilen ayarlar. Env değişkenlerinin aksine redeploy gerektirmez —
  * Pinterest board seçimi gibi, kullanıcının çalışma anında değiştirdiği değerler içindir.
  */
-export type AppSettingKey = 'pinterest_board_id' | 'pinterest_token_env';
+export type AppSettingKey =
+  | 'pinterest_board_id'
+  | 'pinterest_token_env'
+  // Son salt okunur bağlantı kontrolünün sonucu (JSON: ConnectionCheck — lib/connection/health.ts).
+  | 'etsy_last_check'
+  | 'pinterest_last_check'
+  // Refresh token sağlayıcı tarafından reddedildi (invalid_grant) → yeniden yetkilendirme şart.
+  // Doluyken çağrılar sağlayıcıya tekrar tekrar gitmez; OAuth callback'i temizler. Değer: ISO zaman.
+  | 'etsy_reauth_required'
+  | 'pinterest_reauth_required';
 
 export async function getSetting(key: AppSettingKey): Promise<string | null> {
   const [row] = await db
@@ -200,6 +217,10 @@ export async function getSetting(key: AppSettingKey): Promise<string | null> {
     .where(eq(appSettings.key, key))
     .limit(1);
   return row?.value ?? null;
+}
+
+export async function deleteSetting(key: AppSettingKey): Promise<void> {
+  await db.delete(appSettings).where(eq(appSettings.key, key));
 }
 
 export async function setSetting(key: AppSettingKey, value: string): Promise<void> {
@@ -256,15 +277,24 @@ type PipelineRunUpdate = {
   attempts?: number;
   publishProgress?: PublishProgress;
   errorMessage?: string | null; // null → önceki hatayı temizle (yeniden çalıştırmada)
+  errorStage?: PipelineStatus | null;
+  errorKind?: ErrorKind | null;
+  etsyListingState?: string;
+  etsyStateCheckedAt?: Date;
+  pinterestBoardId?: string;
+  pinAttemptedAt?: Date | null;
 };
 
 export async function updatePipelineRun(
   id: string,
   updates: PipelineRunUpdate,
 ): Promise<void> {
+  // Hata temizlenirken (errorMessage: null — adım yeniden başlıyor) aşama/sınıf da temizlenir;
+  // aksi halde eski hatanın sınıfı yeni, sağlıklı çalışmanın üstünde asılı kalırdı.
+  const clear = updates.errorMessage === null ? { errorStage: null, errorKind: null } : {};
   await db
     .update(pipelineRuns)
-    .set({ ...updates, updatedAt: new Date() })
+    .set({ ...clear, ...updates, updatedAt: new Date() })
     .where(eq(pipelineRuns.id, id));
 }
 
@@ -291,11 +321,34 @@ export async function listPipelineRuns(limit = 50, offset = 0): Promise<Pipeline
  * üzerinde yapılır.
  */
 export async function pipelineRunStatusCounts(): Promise<Record<string, number>> {
+  // Tarihsel red kayıtları (status='error' + REJECT_MESSAGE) DB'de değiştirilmeden 'rejected'
+  // sayılır. `done` ise Etsy'den geri okunan duruma göre kırılır: `done:active`, `done:draft`,
+  // `done:unknown` (okuma başarısız), `done:unchecked` (hiç okunmadı) … — panel "aktif" sayısını
+  // `done`'a değil, doğrulanmış duruma dayandırır.
+  const key = sql<string>`CASE
+      WHEN ${pipelineRuns.status} = 'error' AND ${pipelineRuns.errorMessage} = ${REJECT_MESSAGE} THEN 'rejected'
+      WHEN ${pipelineRuns.status} = 'done' THEN 'done:' || coalesce(${pipelineRuns.etsyListingState}, 'unchecked')
+      ELSE ${pipelineRuns.status}
+    END`;
+  // GROUP BY 1 (sıra numarası): ifade parametre ($1) içerdiği için aynı CASE'i GROUP BY'da tekrar
+  // yazmak ayrı bir parametre ($2) üretir ve Postgres ifadeleri eşleştiremez (42803).
   const rows = await db
-    .select({ status: pipelineRuns.status, n: sql<number>`count(*)::int` })
+    .select({ key, n: sql<number>`count(*)::int` })
     .from(pipelineRuns)
-    .groupBy(pipelineRuns.status);
-  return Object.fromEntries(rows.map((r) => [r.status as string, r.n]));
+    .groupBy(sql`1`);
+  return Object.fromEntries(rows.map((r) => [r.key, r.n]));
+}
+
+/** Etsy'de listing'i olan run'lar — salt okunur durum kontrolü için (en yeni önce). */
+export async function listRunsWithListing(limit = 20, offset = 0): Promise<PipelineRun[]> {
+  const rows = await db
+    .select()
+    .from(pipelineRuns)
+    .where(isNotNull(pipelineRuns.etsyListingId))
+    .orderBy(desc(pipelineRuns.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return rows.map(rowToPipelineRun);
 }
 
 /**

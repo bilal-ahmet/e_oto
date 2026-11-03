@@ -48,6 +48,12 @@ export interface ProductConfig {
   usesSizeGuide: boolean; // sabit ölçü görseli eklenir mi
   mockupScenes: MockupScene[]; // mockup sahneleri
   defaultPrice: number; // USD — kaynak `pricing.ts` (client da okuduğu için ayrı)
+  /**
+   * Teslim edilen dijital ürünü DOĞRU tanımlayan materyal terimleri (İngilizce, yalnız harf/rakam/
+   * boşluk). Claude'un ürettiği listede yer kalırsa 13'e buradan, KULLANILMAMIŞ olanlarla tamamlanır.
+   * Fiziksel malzeme (canvas, paper, ink, frame…) YAZILMAZ — teslim edilmeyen bir şeyi vaat eder.
+   */
+  materialPool: string[];
 }
 
 // Print dosya spec'i mevcut PRINT_RATIOS'tan türetilir (tek kaynak; açıklama boyut listesi de oradan).
@@ -65,6 +71,38 @@ const TV_FILES: DigitalFileSpec[] = [
   { key: 'screen_fhd', label: 'Full HD (1920×1080)', fileName: 'frame-tv-fullhd-1920x1080.jpg', width: 1920, height: 1080 },
 ];
 
+// Oran adları dosyalardan türetilir: "2x3 ratio JPG" … (gerçekte teslim edilen dosyalar).
+const PRINT_MATERIALS = [
+  'Digital download',
+  'JPG file',
+  'Printable wall art',
+  'Digital print',
+  'High resolution JPG',
+  'RGB color',
+  '300 DPI JPG',
+  ...PRINT_RATIOS.map((r) => `${r.label.replace(':', 'x')} ratio JPG`),
+  'Instant download',
+  'Printable art',
+  'Digital art file',
+];
+
+const TV_MATERIALS = [
+  'Digital download',
+  'JPG file',
+  'Frame TV art',
+  'Digital art',
+  '4K image',
+  'Full HD image',
+  '3840x2160 JPG',
+  '1920x1080 JPG',
+  '16x9 image',
+  'RGB color',
+  'Screen art',
+  'Instant download',
+  'TV wallpaper',
+  'Digital art file',
+];
+
 export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
   print: {
     type: 'print',
@@ -78,6 +116,7 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     usesSizeGuide: true,
     mockupScenes: MOCKUP_SCENES,
     defaultPrice: DEFAULT_PRICE.print,
+    materialPool: PRINT_MATERIALS,
   },
   tv: {
     type: 'tv',
@@ -92,6 +131,7 @@ export const PRODUCT_CONFIGS: Record<ProductType, ProductConfig> = {
     usesSizeGuide: false,
     mockupScenes: TV_MOCKUP_SCENES,
     defaultPrice: DEFAULT_PRICE.tv,
+    materialPool: TV_MATERIALS,
   },
 };
 

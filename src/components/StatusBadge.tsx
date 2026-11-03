@@ -24,6 +24,7 @@ export function StatusBadge({ status }: { status: PipelineStatus }) {
     >
       {status === 'done' ? <span aria-hidden>✓</span> : null}
       {status === 'error' ? <span aria-hidden>!</span> : null}
+      {status === 'rejected' ? <span aria-hidden>×</span> : null}
       {marker === 'dot' ? (
         <span aria-hidden className="size-1.5 rounded-full bg-current motion-safe:animate-pulse" />
       ) : null}

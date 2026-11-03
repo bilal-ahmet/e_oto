@@ -15,7 +15,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { DigitalFileUrls, ImageModel, MediaUrls, PipelineStatus, ProductType, PublishProgress, SeoData } from '@/types';
+import type { DigitalFileUrls, ErrorKind, ImageModel, MediaUrls, PipelineStatus, ProductType, PublishProgress, SeoData } from '@/types';
 
 // ────────────────────────────────────────────────────────────────────────────
 // oauth_tokens
@@ -60,6 +60,15 @@ export const pipelineRuns = pgTable('pipeline_runs', {
   attempts: integer('attempts').default(0).notNull(),
   publishProgress: jsonb('publish_progress').$type<PublishProgress>(),
   errorMessage: text('error_message'),
+  // Teknik hata ayrıntısı (0012): hangi aşamada, hangi sınıfta. Kullanıcı reddi burada YOK (status 'rejected').
+  errorStage: text('error_stage').$type<PipelineStatus>(),
+  errorKind: text('error_kind').$type<ErrorKind>(),
+  // Etsy'den salt okunur geri okunan ilan durumu — panel "aktif" sayısını buna dayandırır, `done`'a değil.
+  etsyListingState: text('etsy_listing_state'),
+  etsyStateCheckedAt: timestamp('etsy_state_checked_at', { withTimezone: true }),
+  // Pinterest: pin'in atıldığı pano + POST /pins denemesinin başladığı an (çift pin mutabakatı).
+  pinterestBoardId: text('pinterest_board_id'),
+  pinAttemptedAt: timestamp('pin_attempted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
