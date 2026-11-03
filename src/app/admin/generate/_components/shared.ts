@@ -26,6 +26,9 @@ export interface CompetitorAnalysis {
     views: number;
   };
   generated: { title: string; tags: string[]; description: string };
+  /** Rakip ilanın görselleri (rank sırası, kapak ilk) — kapak referans görsele otomatik yüklenir. */
+  images?: { full: string; thumb: string }[];
+  imageError?: string;
 }
 
 export function stageIndexFor(status: PipelineStatus | 'idle'): number {

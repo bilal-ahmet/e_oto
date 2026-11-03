@@ -52,6 +52,9 @@ export default function GeneratePage() {
   const [variations, setVariations] = useState(3);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
+  // Referans rakip ilandan otomatik mı yüklendi (etiket + rakip temizlenince birlikte temizlenir).
+  const [referenceFromCompetitor, setReferenceFromCompetitor] = useState(false);
+  const [referenceNotice, setReferenceNotice] = useState<string | null>(null);
   const [note, setNote] = useState(''); // Instruction Üretici: opsiyonel ek not
   const [instructing, setInstructing] = useState(false); // talimat üretiliyor
   const [research, setResearch] = useState<CompetitorAnalysis | null>(null); // bağlı rakip analizi
@@ -286,6 +289,8 @@ export default function GeneratePage() {
     setPrompt('');
     setReferenceFile(null);
     setReferencePreview(null);
+    setReferenceFromCompetitor(false);
+    setReferenceNotice(null);
     setNote('');
     setResearch(null);
     setSavedVariations(new Set());
@@ -332,8 +337,51 @@ export default function GeneratePage() {
     setSavedVariations(new Set());
   }
 
+  /**
+   * Rakip analizi bitince ilanın KAPAK görselini referans görsele otomatik yükler (sunucu aracısı
+   * üzerinden — Etsy CDN'i tarayıcıda CORS'a takılabilir). Görsel üretimden önce alanda görünür;
+   * kullanıcı kaldırabilir ya da kendi dosyasıyla değiştirebilir.
+   */
+  async function loadCompetitorReference(r: CompetitorAnalysis) {
+    setResearch(r);
+    setReferenceNotice(null);
+    const cover = r.images?.[0];
+    if (!cover) {
+      setReferenceNotice(`Rakip ilanın görseli alınamadı${r.imageError ? `: ${r.imageError}` : ''} — referansı elle ekleyebilirsin.`);
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/competitor-research/image?url=${encodeURIComponent(cover.full)}`);
+      if (!res.ok) {
+        const data = await readJson<{ error?: string }>(res);
+        throw new Error(data.error ?? `Sunucu ${res.status} döndü.`);
+      }
+      const blob = await res.blob();
+      const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+      const file = new File([blob], `rakip-${r.source.listingId}.${ext}`, { type: blob.type || 'image/jpeg' });
+      setReferenceFile(file);
+      setReferenceFromCompetitor(true);
+      setReferencePreview(URL.createObjectURL(blob));
+    } catch (e) {
+      setReferenceNotice(`Rakip görseli referansa yüklenemedi: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  function clearCompetitor() {
+    setResearch(null);
+    setReferenceNotice(null);
+    // Yalnız otomatik yüklenen referans temizlenir; elle seçilen dosyaya dokunulmaz.
+    if (referenceFromCompetitor) {
+      setReferenceFile(null);
+      setReferencePreview(null);
+      setReferenceFromCompetitor(false);
+    }
+  }
+
   function onReferenceChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
+    setReferenceFromCompetitor(false);
+    setReferenceNotice(null);
     setReferenceFile(file);
     if (!file) {
       setReferencePreview(null);
@@ -555,8 +603,8 @@ export default function GeneratePage() {
       {!run ? (
         <CompetitorResearchPanel
           research={research}
-          onAnalyzed={setResearch}
-          onClear={() => setResearch(null)}
+          onAnalyzed={(r) => void loadCompetitorReference(r)}
+          onClear={clearCompetitor}
         />
       ) : null}
 
@@ -658,6 +706,23 @@ export default function GeneratePage() {
                 />
               </Framed>
             ) : null}
+            {referenceFromCompetitor && research ? (
+              <p className="mt-2 text-sm text-ink-muted">
+                Rakip ilanın (#{research.source.listingId}) kapak görselinden otomatik yüklendi.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReferenceFile(null);
+                    setReferencePreview(null);
+                    setReferenceFromCompetitor(false);
+                  }}
+                  className="font-medium underline"
+                >
+                  Kaldır
+                </button>
+              </p>
+            ) : null}
+            {referenceNotice ? <p className="mt-2 text-sm text-state-turn-ink">{referenceNotice}</p> : null}
 
             {referenceFile ? (
               <div className="mt-4 space-y-3 rounded-lg border border-sand bg-shade p-4">

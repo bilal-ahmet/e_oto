@@ -421,6 +421,25 @@ export interface EtsyPublicListing {
   style?: string[];
 }
 
+export interface PublicListingImage {
+  full: string; // url_fullxfull — referans görsel olarak yüklenen
+  thumb: string; // url_570xN — kartta gösterilen
+}
+
+/**
+ * Bir listing'in görsellerini PUBLIC uçtan çeker (yalnız x-api-key; rank sırasıyla, kapak ilk).
+ * Rakip analizinde kapak görseli üretim formunun referans görseline otomatik yüklenir.
+ */
+export async function getListingImagesPublic(listingId: number): Promise<PublicListingImage[]> {
+  const r = await etsyPublicFetch<{
+    results?: { rank?: number; url_fullxfull?: string; url_570xN?: string }[];
+  }>(`/listings/${listingId}/images`);
+  return (r.results ?? [])
+    .filter((i) => i.url_fullxfull)
+    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+    .map((i) => ({ full: i.url_fullxfull!, thumb: i.url_570xN ?? i.url_fullxfull! }));
+}
+
 /**
  * Tek bir Etsy listing'in PUBLIC verisini çeker (yalnız x-api-key; OAuth gerekmez).
  * Rakip SEO analizi için kullanılır. Silinmiş/private listing → Etsy 404 fırlatır.

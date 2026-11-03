@@ -9,7 +9,7 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { getListingById } from '@/lib/etsy/listings';
+import { getListingById, getListingImagesPublic } from '@/lib/etsy/listings';
 import { analyzeCompetitorSeo } from '@/lib/claude/competitor-seo';
 import { createCompetitorResearch } from '@/lib/db/queries';
 
@@ -37,7 +37,14 @@ export async function POST(req: NextRequest) {
   const listingId = Number(match[1]);
 
   try {
-    const listing = await getListingById(listingId);
+    // Görseller analizi BOZMAZ: alınamazsa yalnız referans otomatik yüklenmez, sebep döner.
+    const [listing, imagesResult] = await Promise.all([
+      getListingById(listingId),
+      getListingImagesPublic(listingId).then(
+        (images) => ({ images, imageError: undefined as string | undefined }),
+        (e: unknown) => ({ images: [], imageError: e instanceof Error ? e.message : String(e) }),
+      ),
+    ]);
 
     const generated = await analyzeCompetitorSeo({
       title: listing.title,
@@ -76,6 +83,9 @@ export async function POST(req: NextRequest) {
         views: listing.views,
       },
       generated,
+      // Kapak ilk sırada — istemci bunu referans görsele otomatik yükler (aracı: /api/competitor-research/image).
+      images: imagesResult.images,
+      imageError: imagesResult.imageError,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Rakip analizi başarısız.';

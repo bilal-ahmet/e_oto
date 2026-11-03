@@ -17,6 +17,12 @@ description: Rakip analizi modülünde çalışırken kullan — rakip Etsy list
 2. `analyzeCompetitorSeo` (`src/lib/claude/competitor-seo.ts`) rakip metninden **özgün** SEO
    üretir (başlık 130-140 karakter + tam 13 tag + açıklama).
 3. Sonuç `competitor_research` tablosuna yazılır (`createCompetitorResearch`).
+4. Aynı anda `getListingImagesPublic` (`GET /listings/{id}/images`, public) ilan görsellerini
+   döner (analizi bozmaz; hata `imageError`). İstemci **kapak görselini referans görsele otomatik
+   yükler** — kullanıcı kararı (2026-11). Görsel `api/competitor-research/image` aracısıyla gelir
+   (CORS); aracı yalnız `https://*.etsystatic.com` kabul eder, yönlendirme izlemez (SSRF koruması).
+   Referans üretimden önce formda görünür, "Kaldır" ile çıkarılabilir. Yeni analiz mevcut referansı
+   (elle seçilmiş olsa da) kapakla değiştirir; rakip temizlenince yalnız otomatik yüklenen silinir.
 
 Run oluşturulurken `competitorResearchId` verilirse run bu analize bağlanır
 (`linkCompetitorResearchToRun`). Gate 2'de `generateSeo` `competitorRef` ile beslenir ve o nişe
